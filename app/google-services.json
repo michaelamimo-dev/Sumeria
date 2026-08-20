@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "385978461962",
+    "project_id": "sumeria-reader",
+    "storage_bucket": "sumeria-reader.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:385978461962:android:3b5621cc6bc96c7a1d14f3",
+        "android_client_info": {
+          "package_name": "com.michaelamimo.sumeria"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAIBUyrdV45mfXgW8RimNn7FDmt_aFFfA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
