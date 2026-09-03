@@ -2,21 +2,17 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp") version "2.2.10-2.0.2"
-    id("com.google.gms.google-services") version "4.5.0" apply false
+    id("com.google.gms.google-services") version "4.5.0"
 }
 
 android {
     namespace = "com.michaelamimo.sumeria"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 37 // Using the standard integer declaration is simpler and widely supported
 
     defaultConfig {
         applicationId = "com.michaelamimo.sumeria"
         minSdk = 36
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -73,4 +69,7 @@ dependencies {
         exclude(group = "org.slf4j")
         exclude(group = "xmlpull")
     }
+
+    // Compose Navigation
+    implementation("androidx.navigation:navigation-compose:2.8.5")
 }
