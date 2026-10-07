@@ -3,9 +3,11 @@ package com.michaelamimo.sumeria
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,17 +17,32 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.michaelamimo.sumeria.navigation.Screen
-import com.michaelamimo.sumeria.ui.auth.LoginScreen
-import com.michaelamimo.sumeria.ui.auth.OnboardingScreen
-import com.michaelamimo.sumeria.ui.auth.SignUpScreen
-import com.michaelamimo.sumeria.ui.auth.SplashScreen
+import com.michaelamimo.sumeria.auth.LoginScreen
+import com.michaelamimo.sumeria.auth.OnboardingScreen
+import com.michaelamimo.sumeria.auth.SignUpScreen
+import com.michaelamimo.sumeria.auth.SplashScreen
+import com.michaelamimo.sumeria.ui.theme.SumeriaColors
+import com.michaelamimo.sumeria.ui.theme.SumeriaTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT
+            )
+        )
+
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+            SumeriaTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = SumeriaColors.SurfaceWhite
+                ) {
                     SumeriaApp()
                 }
             }
@@ -83,7 +100,7 @@ fun SumeriaApp() {
 
         composable(Screen.Home.route) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Library Home Screen (Phase 2)", style = MaterialTheme.typography.headlineMedium)
+                Text("Library Home Screen (Phase 2)", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
             }
         }
     }
