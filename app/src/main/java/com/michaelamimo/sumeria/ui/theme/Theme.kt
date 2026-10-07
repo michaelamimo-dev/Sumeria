@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// Map the default Material components to the Sumeria palette
 private val DarkColorScheme = darkColorScheme(
     primary = SumeriaColors.ActionPrimary,
     secondary = SumeriaColors.Accent,
@@ -41,7 +40,6 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun SumeriaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // FIX: Set dynamicColor to false by default so Android doesn't override our Green palette
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -59,8 +57,8 @@ fun SumeriaTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // FIX: Ensures the system bars use dark icons on older Android versions too
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
+            // MODIFIED: false = white icons (for our dark green bar), true = dark icons (for white bottom nav bar)
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = true
         }
     }

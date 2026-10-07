@@ -8,6 +8,7 @@ import androidx.activity.SystemBarStyle
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,9 +29,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // MODIFIED: 'SystemBarStyle.dark' forces the status bar icons to be white
+        // so they can be seen clearly on our new Dark Green status bar background.
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(
-                AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT
+            statusBarStyle = SystemBarStyle.dark(
+                AndroidColor.TRANSPARENT
             ),
             navigationBarStyle = SystemBarStyle.light(
                 AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT
@@ -100,7 +103,7 @@ fun SumeriaApp() {
 
         composable(Screen.Home.route) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Library Home Screen (Phase 2)", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                Text("Library Home Screen (Phase 2)", style = MaterialTheme.typography.headlineMedium)
             }
         }
     }

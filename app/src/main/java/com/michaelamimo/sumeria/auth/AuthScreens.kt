@@ -51,29 +51,43 @@ fun SplashScreen(
         onSplashFinished(viewModel.isUserLoggedIn)
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SumeriaColors.SurfaceWhite),
-        contentAlignment = Alignment.Center
+            .background(SumeriaColors.SurfaceWhite)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        // Dark Green Status Bar Background
+        Box(
             modifier = Modifier
-                .alpha(alphaAnim)
-                .scale(scaleAnim)
+                .fillMaxWidth()
+                .background(SumeriaColors.ActionPrimary)
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.navigationBars),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "Sumeria",
-                style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
-                color = SumeriaColors.TextPrimary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Your boundless library, redefined.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = SumeriaColors.Muted
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .alpha(alphaAnim)
+                    .scale(scaleAnim)
+            ) {
+                Text(
+                    text = "Sumeria",
+                    style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
+                    color = SumeriaColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Your boundless library, redefined.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = SumeriaColors.Muted
+                )
+            }
         }
     }
 }
@@ -91,6 +105,14 @@ fun OnboardingScreen(
             .fillMaxSize()
             .background(SumeriaColors.SurfaceWhite)
     ) {
+        // Dark Green Status Bar Background
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SumeriaColors.ActionPrimary)
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+        )
+
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
@@ -104,6 +126,7 @@ fun OnboardingScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -170,7 +193,6 @@ fun OnboardingPage(page: Int) {
         else -> "Focus on the story with a clean, distraction-free reading experience."
     }
 
-    // Select the correct imported illustration based on the page number
     val imageRes = when (page) {
         0 -> R.drawable.ic_onboarding_library_one
         1 -> R.drawable.ic_onboarding_library_two
@@ -184,14 +206,12 @@ fun OnboardingPage(page: Int) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-
-        // The actual image implementation replacing the Box
         Image(
             painter = painterResource(id = imageRes),
-            contentDescription = null, // Null because it's decorative
+            contentDescription = null,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f) // Ensures the illustration scales nicely
+                .aspectRatio(1f)
         )
 
         Spacer(modifier = Modifier.height(48.dp))
@@ -233,87 +253,99 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(SumeriaColors.SurfaceWhite)
-            .systemBarsPadding() // FIXES THE STATUS BAR ISSUE
-            .padding(horizontal = 32.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(48.dp))
-
-        SumeriaTurtleLogo()
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Sign In", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = SumeriaColors.TextPrimary)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Continue your reading journey.", style = MaterialTheme.typography.bodyMedium, color = SumeriaColors.Muted)
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        SumeriaTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = "E-mail",
-            leadingIcon = painterResource(id = R.drawable.ic_email), // Add an ic_email.xml vector
-            keyboardType = KeyboardType.Email
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SumeriaTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = "Password",
-            leadingIcon = painterResource(id = R.drawable.ic_lock), // Add an ic_lock.xml vector
-            isPassword = true
-        )
-
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            TextButton(onClick = { /* TODO: Forgot Password API */ }) {
-                Text("Forgot password?", color = SumeriaColors.ActionPrimary, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SumeriaPrimaryButton(
-            text = "Continue",
-            onClick = { viewModel.login(email, password) },
-            isLoading = authState is AuthState.Loading
-        )
-
-        if (authState is AuthState.Error) {
-            Spacer(modifier = Modifier.height(12.dp))
-            // Apply the friendly error mapping for Login
-            val displayError = getFriendlyErrorMessage((authState as AuthState.Error).message, isSignIn = true)
-            Text(
-                text = displayError,
-                color = SumeriaColors.Error,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        SumeriaDivider(text = "Don't have an account yet?")
-        Spacer(modifier = Modifier.height(32.dp))
-
-        OutlinedButton(
-            onClick = onNavigateToSignUp,
+        // Dark Green Status Bar Background
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, SumeriaColors.Muted.copy(alpha = 0.3f))
+                .background(SumeriaColors.ActionPrimary)
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 32.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Create an account", color = SumeriaColors.TextPrimary, fontSize = MaterialTheme.typography.titleMedium.fontSize)
+            Spacer(modifier = Modifier.height(48.dp))
+
+            SumeriaTurtleLogo()
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Sign In", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = SumeriaColors.TextPrimary)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Continue your reading journey.", style = MaterialTheme.typography.bodyMedium, color = SumeriaColors.Muted)
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            SumeriaTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = "E-mail",
+                leadingIcon = painterResource(id = R.drawable.ic_email),
+                keyboardType = KeyboardType.Email
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SumeriaTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = "Password",
+                leadingIcon = painterResource(id = R.drawable.ic_lock),
+                isPassword = true
+            )
+
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                TextButton(onClick = { /* TODO: Forgot Password API */ }) {
+                    Text("Forgot password?", color = SumeriaColors.ActionPrimary, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SumeriaPrimaryButton(
+                text = "Continue",
+                onClick = { viewModel.login(email, password) },
+                isLoading = authState is AuthState.Loading
+            )
+
+            if (authState is AuthState.Error) {
+                Spacer(modifier = Modifier.height(12.dp))
+                val displayError = getFriendlyErrorMessage((authState as AuthState.Error).message, isSignIn = true)
+                Text(
+                    text = displayError,
+                    color = SumeriaColors.Error,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            SumeriaDivider(text = "Don't have an account yet?")
+            Spacer(modifier = Modifier.height(32.dp))
+
+            OutlinedButton(
+                onClick = onNavigateToSignUp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, SumeriaColors.Muted.copy(alpha = 0.3f))
+            ) {
+                Text("Create an account", color = SumeriaColors.TextPrimary, fontSize = MaterialTheme.typography.titleMedium.fontSize)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SumeriaSocialButton(text = "Sign in with Google", iconRes = R.drawable.ic_google_logo, onClick = { /* TODO */ })
+            Spacer(modifier = Modifier.height(16.dp))
+            SumeriaSocialButton(text = "Sign in with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { /* TODO */ })
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SumeriaSocialButton(text = "Sign in with Google", iconRes = R.drawable.ic_google_logo, onClick = { /* TODO */ })
-        Spacer(modifier = Modifier.height(16.dp))
-        SumeriaSocialButton(text = "Sign in with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { /* TODO */ })
-
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -329,7 +361,6 @@ fun SignUpScreen(
     val authState by viewModel.authState.collectAsState()
     var localError by remember { mutableStateOf("") }
 
-    // Live Password Validation
     val hasMinLength = password.length >= 8
     val hasUpper = password.any { it.isUpperCase() }
     val hasNumber = password.any { it.isDigit() }
@@ -346,118 +377,129 @@ fun SignUpScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(SumeriaColors.SurfaceWhite)
-            .systemBarsPadding() // FIXES THE STATUS BAR ISSUE
-            .padding(horizontal = 32.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(48.dp))
-
-        SumeriaTurtleLogo()
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Create your account", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = SumeriaColors.TextPrimary)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Start building your personal reading space.", style = MaterialTheme.typography.bodyMedium, color = SumeriaColors.Muted, textAlign = TextAlign.Center)
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        SumeriaTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = "E-mail",
-            leadingIcon = painterResource(id = R.drawable.ic_email),
-            keyboardType = KeyboardType.Email
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SumeriaTextField(
-            value = password,
-            onValueChange = { password = it; localError = "" },
-            label = "Password",
-            leadingIcon = painterResource(id = R.drawable.ic_lock),
-            isPassword = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Password Requirements Grid
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                ValidationItem(text = "8+ characters", isValid = hasMinLength)
-                ValidationItem(text = "1 uppercase", isValid = hasUpper)
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                ValidationItem(text = "1 number", isValid = hasNumber)
-                ValidationItem(text = "1 special character", isValid = hasSpecial)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SumeriaTextField(
-            value = confirmPassword,
-            onValueChange = { confirmPassword = it; localError = "" },
-            label = "Confirm Password",
-            leadingIcon = painterResource(id = R.drawable.ic_lock),
-            isPassword = true
+        // Dark Green Status Bar Background
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SumeriaColors.ActionPrimary)
+                .windowInsetsTopHeight(WindowInsets.statusBars)
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        SumeriaPrimaryButton(
-            text = "Create Account",
-            onClick = {
-                if (password != confirmPassword) {
-                    localError = "Passwords do not match."
-                } else if (!hasMinLength || !hasUpper || !hasNumber || !hasSpecial) {
-                    localError = "Please meet all password requirements."
-                } else {
-                    viewModel.signUp(email, password)
-                }
-            },
-            isLoading = authState is AuthState.Loading
-        )
-
-        if (localError.isNotEmpty() || authState is AuthState.Error) {
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Determine the message: local validation takes priority, then we map Firebase errors
-            val displayError = if (localError.isNotEmpty()) {
-                localError
-            } else {
-                getFriendlyErrorMessage((authState as AuthState.Error).message, isSignIn = false)
-            }
-
-            Text(
-                text = displayError,
-                color = SumeriaColors.Error,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        SumeriaDivider(text = "or")
-        Spacer(modifier = Modifier.height(32.dp))
-
-        SumeriaSocialButton(text = "Continue with Google", iconRes = R.drawable.ic_google_logo, onClick = { /* TODO */ })
-        Spacer(modifier = Modifier.height(16.dp))
-        SumeriaSocialButton(text = "Continue with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { /* TODO */ })
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Row(
-            modifier = Modifier.padding(vertical = 32.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 32.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Already have an account? ", color = SumeriaColors.Muted)
-            Text(
-                text = "Sign In",
-                color = SumeriaColors.ActionPrimary,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable { onNavigateToLogin() }
+            Spacer(modifier = Modifier.height(48.dp))
+
+            SumeriaTurtleLogo()
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Create your account", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = SumeriaColors.TextPrimary)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Start building your personal reading space.", style = MaterialTheme.typography.bodyMedium, color = SumeriaColors.Muted, textAlign = TextAlign.Center)
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            SumeriaTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = "E-mail",
+                leadingIcon = painterResource(id = R.drawable.ic_email),
+                keyboardType = KeyboardType.Email
             )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SumeriaTextField(
+                value = password,
+                onValueChange = { password = it; localError = "" },
+                label = "Password",
+                leadingIcon = painterResource(id = R.drawable.ic_lock),
+                isPassword = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    ValidationItem(text = "8+ characters", isValid = hasMinLength)
+                    ValidationItem(text = "1 uppercase", isValid = hasUpper)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    ValidationItem(text = "1 number", isValid = hasNumber)
+                    ValidationItem(text = "1 special character", isValid = hasSpecial)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SumeriaTextField(
+                value = confirmPassword,
+                onValueChange = { confirmPassword = it; localError = "" },
+                label = "Confirm Password",
+                leadingIcon = painterResource(id = R.drawable.ic_lock),
+                isPassword = true
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            SumeriaPrimaryButton(
+                text = "Create Account",
+                onClick = {
+                    if (password != confirmPassword) {
+                        localError = "Passwords do not match."
+                    } else if (!hasMinLength || !hasUpper || !hasNumber || !hasSpecial) {
+                        localError = "Please meet all password requirements."
+                    } else {
+                        viewModel.signUp(email, password)
+                    }
+                },
+                isLoading = authState is AuthState.Loading
+            )
+
+            if (localError.isNotEmpty() || authState is AuthState.Error) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                val displayError = if (localError.isNotEmpty()) {
+                    localError
+                } else {
+                    getFriendlyErrorMessage((authState as AuthState.Error).message, isSignIn = false)
+                }
+
+                Text(
+                    text = displayError,
+                    color = SumeriaColors.Error,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            SumeriaDivider(text = "or")
+            Spacer(modifier = Modifier.height(32.dp))
+
+            SumeriaSocialButton(text = "Continue with Google", iconRes = R.drawable.ic_google_logo, onClick = { /* TODO */ })
+            Spacer(modifier = Modifier.height(16.dp))
+            SumeriaSocialButton(text = "Continue with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { /* TODO */ })
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Row(
+                modifier = Modifier.padding(vertical = 32.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Already have an account? ", color = SumeriaColors.Muted)
+                Text(
+                    text = "Sign In",
+                    color = SumeriaColors.ActionPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onNavigateToLogin() }
+                )
+            }
         }
     }
 }
@@ -479,19 +521,14 @@ fun ValidationItem(text: String, isValid: Boolean) {
     }
 }
 
-/**
- * Maps raw Firebase error messages into user-friendly copy.
- */
 fun getFriendlyErrorMessage(rawMessage: String, isSignIn: Boolean): String {
     return if (isSignIn) {
-        // Generic, highly secure, and friendly login message requested
         "We couldn’t sign you in. Please check your email and password."
     } else {
-        // Specific user-friendly mapping for account creation
         if (rawMessage.contains("badly formatted", ignoreCase = true)) {
             "That doesn’t look like a valid email address. Please check and try again."
         } else {
-            rawMessage // Fallback to raw message for other registration errors (e.g., email already in use)
+            rawMessage
         }
     }
 }
