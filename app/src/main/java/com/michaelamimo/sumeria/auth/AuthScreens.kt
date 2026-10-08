@@ -212,7 +212,7 @@ fun OnboardingPage(page: Int) {
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .scale(1.02f)
+                .scale(1.001f)
         )
 
         Spacer(modifier = Modifier.height(48.dp))
