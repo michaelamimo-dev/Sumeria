@@ -57,7 +57,7 @@ fun SumeriaTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // MODIFIED: false = white icons (for our dark green bar), true = dark icons (for white bottom nav bar)
+            // false = White Icons (because our status bar background is dark green)
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = true
         }

@@ -26,11 +26,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Forces the status bar icons to be white so they can be seen clearly
-        // on our Dark Green status bar background.
+        // REVERTED to default light status bars (which produces dark icons)
+        // because the Home screen header is now white again.
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(
-                AndroidColor.TRANSPARENT
+            statusBarStyle = SystemBarStyle.light(
+                AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT
             ),
             navigationBarStyle = SystemBarStyle.light(
                 AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT

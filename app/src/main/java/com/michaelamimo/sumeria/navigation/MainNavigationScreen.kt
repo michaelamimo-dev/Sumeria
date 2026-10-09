@@ -220,14 +220,6 @@ fun PlaceholderScreen(title: String) {
             .fillMaxSize()
             .background(SumeriaColors.SurfaceWhite)
     ) {
-        // Dark green area behind the status bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(SumeriaColors.ActionPrimary)
-                .windowInsetsTopHeight(WindowInsets.statusBars)
-        )
-
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
