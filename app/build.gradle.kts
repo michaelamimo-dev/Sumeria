@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.text)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -74,4 +75,7 @@ dependencies {
 
     // Compose Navigation
     implementation("androidx.navigation:navigation-compose:2.8.5")
+
+    // Coil for asynchronous image loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
 }

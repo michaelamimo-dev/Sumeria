@@ -6,13 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import android.graphics.Color as AndroidColor
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,13 +20,14 @@ import com.michaelamimo.sumeria.auth.SignUpScreen
 import com.michaelamimo.sumeria.auth.SplashScreen
 import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 import com.michaelamimo.sumeria.ui.theme.SumeriaTheme
+import com.michaelamimo.sumeria.navigation.MainNavigationScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // MODIFIED: 'SystemBarStyle.dark' forces the status bar icons to be white
-        // so they can be seen clearly on our new Dark Green status bar background.
+        // Forces the status bar icons to be white so they can be seen clearly
+        // on our Dark Green status bar background.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(
                 AndroidColor.TRANSPARENT
@@ -61,7 +58,7 @@ fun SumeriaApp() {
         composable(Screen.Splash.route) {
             SplashScreen(onSplashFinished = { isLoggedIn ->
                 if (isLoggedIn) {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 } else {
@@ -82,7 +79,7 @@ fun SumeriaApp() {
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 },
@@ -93,7 +90,7 @@ fun SumeriaApp() {
         composable(Screen.SignUp.route) {
             SignUpScreen(
                 onSignUpSuccess = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 },
@@ -101,10 +98,9 @@ fun SumeriaApp() {
             )
         }
 
-        composable(Screen.Home.route) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Library Home Screen (Phase 2)", style = MaterialTheme.typography.headlineMedium)
-            }
+        // The new Main Navigation Screen that hosts the bottom bar and the 5 tabs
+        composable(Screen.Main.route) {
+            MainNavigationScreen()
         }
     }
 }
