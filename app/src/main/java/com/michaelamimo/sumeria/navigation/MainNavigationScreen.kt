@@ -44,6 +44,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.michaelamimo.sumeria.ui.home.HomeScreen
 import com.michaelamimo.sumeria.ui.theme.SumeriaColors
+import com.michaelamimo.sumeria.ui.library.LibraryScreen
 
 @Composable
 fun MainNavigationScreen() {
@@ -83,7 +84,7 @@ fun MainNavigationScreen() {
             }
 
             composable(Screen.Library.route) {
-                PlaceholderScreen("Library")
+                LibraryScreen()
             }
 
             composable(Screen.Reader.route) {
