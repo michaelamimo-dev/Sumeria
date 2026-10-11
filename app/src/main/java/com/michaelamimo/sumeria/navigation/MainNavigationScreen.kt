@@ -8,14 +8,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -43,8 +42,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.michaelamimo.sumeria.ui.home.HomeScreen
-import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 import com.michaelamimo.sumeria.ui.library.LibraryScreen
+import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 
 @Composable
 fun MainNavigationScreen() {
@@ -135,7 +134,6 @@ fun SumeriaBottomNavigationBar(
         )
     )
 
-    // Continuous Sumeria-green navigation background
     Surface(
         color = SumeriaColors.ActionPrimary,
         modifier = Modifier.fillMaxWidth()
@@ -145,63 +143,65 @@ fun SumeriaBottomNavigationBar(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .height(62.dp)
-                .padding(horizontal = 28.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEach { item ->
                 val isSelected = currentRoute == item.route
 
+                // Each item gets an equal-width cell, spreading the icons
+                // across the full navigation bar.
                 Column(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isSelected) {
-                                SumeriaColors.SurfaceWhite.copy(alpha = 0.14f)
-                            } else {
-                                Color.Transparent
-                            }
-                        )
-                        .clickable {
-                            onNavigate(item.route)
-                        }
-                        .padding(
-                            horizontal = 8.dp,
-                            vertical = 4.dp
-                        ),
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable { onNavigate(item.route) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = item.label,
-                        tint = if (isSelected) {
-                            SumeriaColors.SurfaceWhite
-                        } else {
-                            SumeriaColors.Muted.copy(alpha = 0.70f)
-                        },
-                        modifier = Modifier.size(26.dp)
-                    )
+                    Column(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) {
+                                    SumeriaColors.SurfaceWhite.copy(alpha = 0.14f)
+                                } else {
+                                    Color.Transparent
+                                }
+                            )
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = item.icon,
+                            contentDescription = item.label,
+                            tint = if (isSelected) {
+                                SumeriaColors.SurfaceWhite
+                            } else {
+                                SumeriaColors.Muted.copy(alpha = 0.70f)
+                            },
+                            modifier = Modifier.size(26.dp)
+                        )
 
-                    Spacer(
-                        modifier = Modifier.height(2.dp)
-                    )
+                        Spacer(Modifier.height(2.dp))
 
-                    Text(
-                        text = item.label,
-                        color = if (isSelected) {
-                            SumeriaColors.SurfaceWhite
-                        } else {
-                            SumeriaColors.Muted.copy(alpha = 0.70f)
-                        },
-                        fontSize = 10.sp,
-                        fontWeight = if (isSelected) {
-                            FontWeight.SemiBold
-                        } else {
-                            FontWeight.Normal
-                        },
-                        maxLines = 1
-                    )
+                        Text(
+                            text = item.label,
+                            color = if (isSelected) {
+                                SumeriaColors.SurfaceWhite
+                            } else {
+                                SumeriaColors.Muted.copy(alpha = 0.70f)
+                            },
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) {
+                                FontWeight.SemiBold
+                            } else {
+                                FontWeight.Normal
+                            },
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
@@ -236,9 +236,7 @@ fun PlaceholderScreen(title: String) {
                     color = SumeriaColors.TextPrimary
                 )
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(Modifier.height(8.dp))
 
                 Text(
                     text = "More coming soon",
