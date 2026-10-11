@@ -75,6 +75,7 @@ private val Ink = Color(0xFF123B35)
 private val Paper = Color(0xFFFFFCF5)
 private val Cream = Color(0xFFFFF4DE)
 private val Mint = Color(0xFFEAF4EC)
+private val MintStage = Color(0xFFD6F1E3) // slightly stronger mint for the header "stage"
 private val Sage = Color(0xFF829D8D)
 private val Amber = Color(0xFFE6A843)
 private val Coral = Color(0xFFF3A58C)
@@ -92,7 +93,6 @@ private const val SIDE = 24 // horizontal page margin, matches Home
 @Composable
 fun LibraryScreen() {
     var selectedCollection by remember { mutableStateOf<LibraryCollection?>(null) }
-    var query by remember { mutableStateOf("") }
     val collections = remember { MockLibraryRepository.getCollections() }
 
     val view = LocalView.current
@@ -126,8 +126,6 @@ fun LibraryScreen() {
             if (selected == null) {
                 CollectionsHome(
                     collections = collections,
-                    query = query,
-                    onQueryChange = { query = it },
                     onCollectionClick = { selectedCollection = it }
                 )
             } else {
@@ -147,268 +145,188 @@ fun LibraryScreen() {
 @Composable
 private fun CollectionsHome(
     collections: List<LibraryCollection>,
-    query: String,
-    onQueryChange: (String) -> Unit,
     onCollectionClick: (LibraryCollection) -> Unit
 ) {
     val allCollection = collections.firstOrNull { it.title.equals("All", ignoreCase = true) }
     val shelves = collections.filterNot { it.title.equals("All", ignoreCase = true) }
     val tiles: List<LibraryCollection?> = shelves + null // trailing null = "New shelf" tile
 
-    val searching = query.isNotBlank()
-    val results = remember(query, allCollection) {
-        if (!searching) emptyList()
-        else allCollection?.books.orEmpty().filter {
-            it.title.contains(query.trim(), ignoreCase = true) ||
-                    it.author.contains(query.trim(), ignoreCase = true)
-        }
-    }
-    val shelfColors = remember { shelfPalette() }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 120.dp)
     ) {
         item {
-            Spacer(Modifier.height(24.dp))
-            LibraryHeader(
-                query = query,
-                onQueryChange = onQueryChange,
-                totalBooks = allCollection?.books?.size ?: 0
+            Spacer(Modifier.height(20.dp))
+            LibraryHeader(totalBooks = allCollection?.books?.size ?: 0)
+            Spacer(Modifier.height(26.dp))
+            SectionHeader(
+                eyebrow = "YOUR BOOK WORLD",
+                title = "Browse by mood",
+                trailing = "${collections.size} shelves"
             )
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(18.dp))
         }
 
-        if (searching) {
+        if (allCollection != null) {
             item {
-                SectionHeader(
-                    eyebrow = "SEARCH",
-                    title = "Matching books",
-                    trailing = "${results.size} found"
+                CollectionFeatureCard(
+                    collection = allCollection,
+                    onClick = { onCollectionClick(allCollection) }
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(14.dp))
             }
+        }
 
-            if (results.isEmpty()) {
-                item {
-                    EmptyState(message = "Nothing matches “${query.trim()}” yet.")
-                }
-            } else {
-                itemsIndexed(results.chunked(3)) { index, row ->
-                    Box(Modifier.padding(horizontal = SIDE.dp)) {
-                        BookShelfRow(
-                            books = row,
-                            shelfColor = shelfColors[index % shelfColors.size]
+        items(tiles.chunked(2)) { pair ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SIDE.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                pair.forEach { collection ->
+                    if (collection != null) {
+                        CollectionTile(
+                            collection = collection,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onCollectionClick(collection) }
+                        )
+                    } else {
+                        NewShelfTile(
+                            modifier = Modifier.weight(1f),
+                            onClick = { /* Show the create shelf action. */ }
                         )
                     }
-                    Spacer(Modifier.height(28.dp))
+                }
+                if (pair.size == 1) {
+                    Spacer(Modifier.weight(1f))
                 }
             }
-        } else {
-            item {
-                SectionHeader(
-                    eyebrow = "YOUR BOOK WORLD",
-                    title = "Browse by mood",
-                    trailing = "${collections.size} shelves"
-                )
-                Spacer(Modifier.height(18.dp))
-            }
+            Spacer(Modifier.height(12.dp))
+        }
 
-            if (allCollection != null) {
-                item {
-                    CollectionFeatureCard(
-                        collection = allCollection,
-                        onClick = { onCollectionClick(allCollection) }
-                    )
-                    Spacer(Modifier.height(14.dp))
-                }
-            }
-
-            items(tiles.chunked(2)) { pair ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SIDE.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    pair.forEach { collection ->
-                        if (collection != null) {
-                            CollectionTile(
-                                collection = collection,
-                                modifier = Modifier.weight(1f),
-                                onClick = { onCollectionClick(collection) }
-                            )
-                        } else {
-                            NewShelfTile(
-                                modifier = Modifier.weight(1f),
-                                onClick = { /* Show the create shelf action. */ }
-                            )
-                        }
-                    }
-                    if (pair.size == 1) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            item {
-                Spacer(Modifier.height(24.dp))
-                LibraryIllustrationFooter()
-                Spacer(Modifier.height(8.dp))
-            }
+        item {
+            Spacer(Modifier.height(24.dp))
+            LibraryIllustrationFooter()
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Header
+// Header: split card (text on cream, illustration on a mint "stage")
 // ---------------------------------------------------------------------------
 
 @Composable
-fun LibraryHeader(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    totalBooks: Int
-) {
-    Column(
+fun LibraryHeader(totalBooks: Int) {
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SIDE.dp)
-    ) {
-        // Eyebrow + book count pill
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LibraryEyebrow("YOUR LIBRARY", larger = true)
-
-            Surface(
-                shape = CircleShape,
-                color = Mint,
-                border = BorderStroke(1.dp, Line)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("📚", fontSize = 15.sp)
-                    Spacer(Modifier.width(7.dp))
-                    Text(
-                        text = "$totalBooks books",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = Ink
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Headline + illustration (same rhythm as the Home greeting)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "A world\nbetween\ncovers.",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 40.sp
-                ),
-                color = Ink
-            )
-            Image(
-                painter = painterResource(id = R.drawable.ic_library_screen),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .width(150.dp)
-                    .height(124.dp)
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = "Find a familiar favorite or make room for a new one.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Sage
-        )
-
-        Spacer(Modifier.height(22.dp))
-
-        LibrarySearchField(
-            query = query,
-            onQueryChange = onQueryChange,
-            placeholder = "Search your library"
-        )
-    }
-}
-
-@Composable
-private fun LibrarySearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    placeholder: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(52.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Line)
+            .padding(horizontal = SIDE.dp),
+        shape = RoundedCornerShape(32.dp),
+        color = Cream,
+        border = BorderStroke(1.dp, Amber.copy(alpha = 0.18f))
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(start = 16.dp, end = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxWidth()
+                .height(210.dp)
         ) {
-            Icon(
-                imageVector = Icons.Rounded.Search,
-                contentDescription = "Search",
-                tint = Sage,
-                modifier = Modifier.size(21.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-
-            BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                cursorBrush = SolidColor(Ink),
-                modifier = Modifier.weight(1f),
-                decorationBox = { innerTextField ->
-                    Box(contentAlignment = Alignment.CenterStart) {
-                        if (query.isEmpty()) {
-                            Text(
-                                text = placeholder,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Sage
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            )
-
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = "Clear search",
-                        tint = Sage,
-                        modifier = Modifier.size(19.dp)
+            // Left: mascot + label, headline, books pill
+            Column(
+                modifier = Modifier
+                    .weight(1.25f)
+                    .fillMaxHeight()
+                    .padding(start = 20.dp, top = 18.dp, bottom = 18.dp, end = 6.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_sumeria_turtle),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(30.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "YOUR LIBRARY",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.1.sp
+                        ),
+                        color = Ink,
+                        maxLines = 1
                     )
                 }
+
+                Text(
+                    text = "A world\nbetween\ncovers.",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 33.sp
+                    ),
+                    color = Ink
+                )
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Line)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📚", fontSize = 14.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "$totalBooks books",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = Ink
+                        )
+                    }
+                }
+            }
+
+            // Right: mint stage with the illustration, flush to the card edge
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp))
+                    .background(MintStage)
+                    .drawBehind {
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.45f),
+                            radius = size.width * 0.55f,
+                            center = Offset(size.width * 0.95f, size.height * 0.08f)
+                        )
+                        drawCircle(
+                            color = Ink.copy(alpha = 0.05f),
+                            radius = size.width * 0.7f,
+                            center = Offset(size.width * 0.95f, size.height * 0.08f),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.3f),
+                            radius = size.width * 0.26f,
+                            center = Offset(size.width * 0.1f, size.height * 0.96f)
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_library_screen),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp)
+                        .height(112.dp)
+                )
             }
         }
     }
@@ -841,6 +759,10 @@ private fun CollectionDetailView(
     var filter by remember(collection) { mutableStateOf(ShelfFilter.All) }
     var shelfQuery by remember(collection) { mutableStateOf("") }
 
+    val totalCount = collection.books.size
+    val cloudCount = remember(collection) { collection.books.count { it.isCloud } }
+    val deviceCount = totalCount - cloudCount
+
     val visibleBooks = remember(collection, filter, shelfQuery) {
         val byFilter = when (filter) {
             ShelfFilter.All -> collection.books
@@ -861,121 +783,21 @@ private fun CollectionDetailView(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 120.dp)
     ) {
-        // Top bar
+        // Hero header + floating search/sort toolbar
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = SIDE.dp, end = SIDE.dp, top = 18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Mint,
-                    border = BorderStroke(1.dp, Line),
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.ArrowBack,
-                            contentDescription = "Back to library",
-                            tint = Ink
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = "Library",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = Sage
-                )
-            }
-            Spacer(Modifier.height(20.dp))
+            ShelfHeader(
+                collection = collection,
+                tint = tint,
+                cloudCount = cloudCount,
+                query = shelfQuery,
+                onQueryChange = { shelfQuery = it },
+                onBackClick = onBackClick
+            )
         }
 
-        // Banner
+        // Filter chips (with counts)
         item {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SIDE.dp),
-                shape = RoundedCornerShape(30.dp),
-                color = tint,
-                border = BorderStroke(1.dp, Ink.copy(alpha = 0.05f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(start = 22.dp, top = 22.dp, bottom = 22.dp, end = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "YOUR SHELF",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.2.sp
-                            ),
-                            color = Ink.copy(alpha = 0.6f)
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = collection.title,
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = collectionBlurb(collection.title),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Ink.copy(alpha = 0.7f)
-                        )
-                        Spacer(Modifier.height(14.dp))
-                        Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.7f)) {
-                            Text(
-                                text = "${collection.books.size} books",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = Ink,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                            )
-                        }
-                    }
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_library_screen_book),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .width(112.dp)
-                            .height(96.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.height(20.dp))
-        }
-
-        // Per-shelf search
-        item {
-            Box(Modifier.padding(horizontal = SIDE.dp)) {
-                LibrarySearchField(
-                    query = shelfQuery,
-                    onQueryChange = { shelfQuery = it },
-                    placeholder = if (collection.title.equals("All", ignoreCase = true))
-                        "Search all books"
-                    else
-                        "Search in ${collection.title}"
-                )
-            }
-            Spacer(Modifier.height(14.dp))
-        }
-
-        // Filter chips
-        item {
+            Spacer(Modifier.height(18.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -986,12 +808,29 @@ private fun CollectionDetailView(
                 ShelfFilter.entries.forEach { option ->
                     LibraryChip(
                         label = option.label,
+                        count = when (option) {
+                            ShelfFilter.All -> totalCount
+                            ShelfFilter.OnDevice -> deviceCount
+                            ShelfFilter.Cloud -> cloudCount
+                        },
                         selected = filter == option,
                         onClick = { filter = option }
                     )
                 }
             }
-            Spacer(Modifier.height(28.dp))
+
+            if (shelfQuery.isNotBlank() || filter != ShelfFilter.All) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "${visibleBooks.size} of $totalCount books",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = Sage,
+                    modifier = Modifier.padding(horizontal = SIDE.dp)
+                )
+            }
+            Spacer(Modifier.height(26.dp))
         }
 
         if (visibleBooks.isEmpty()) {
@@ -1018,9 +857,321 @@ private fun CollectionDetailView(
     }
 }
 
+/**
+ * Tinted hero with rounded bottom corners. The search/sort toolbar floats over its
+ * bottom edge, so the toolbar and the hero read as one piece.
+ */
+@Composable
+private fun ShelfHeader(
+    collection: LibraryCollection,
+    tint: Color,
+    cloudCount: Int,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onBackClick: () -> Unit
+) {
+    val overlap = 28.dp
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = overlap),
+            shape = RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp),
+            color = tint
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        // Soft decorative shapes
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.34f),
+                            radius = size.width * 0.46f,
+                            center = Offset(size.width * 1.0f, size.height * 0.12f)
+                        )
+                        drawCircle(
+                            color = Ink.copy(alpha = 0.05f),
+                            radius = size.width * 0.58f,
+                            center = Offset(size.width * 1.0f, size.height * 0.12f),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.22f),
+                            radius = size.width * 0.2f,
+                            center = Offset(size.width * 0.02f, size.height * 0.9f)
+                        )
+                    }
+                    .padding(
+                        start = SIDE.dp,
+                        end = SIDE.dp,
+                        top = 18.dp,
+                        bottom = overlap + 22.dp
+                    )
+            ) {
+                // Back + emoji badge
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, Ink.copy(alpha = 0.06f)),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowBack,
+                                contentDescription = "Back to library",
+                                tint = Ink
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(collectionEmoji(collection.title), fontSize = 20.sp)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Title block + illustration
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "YOUR SHELF",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.4.sp
+                            ),
+                            color = Ink.copy(alpha = 0.55f)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = collection.title,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = collectionBlurb(collection.title),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Ink.copy(alpha = 0.7f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatPill("${collection.books.size} books")
+                            if (cloudCount > 0) {
+                                StatPill("$cloudCount in cloud")
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(116.dp)
+                            .background(Color.White.copy(alpha = 0.5f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_library_screen_book),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .width(98.dp)
+                                .height(84.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        ShelfToolbar(
+            query = query,
+            onQueryChange = onQueryChange,
+            placeholder = if (collection.title.equals("All", ignoreCase = true))
+                "Search all books"
+            else
+                "Search in ${collection.title}",
+            onSortClick = { /* Sorting options will be added in a later phase. */ },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = SIDE.dp)
+        )
+    }
+}
+
+@Composable
+private fun StatPill(text: String) {
+    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.75f)) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.Bold
+            ),
+            color = Ink,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+    }
+}
+
+/** One raised card holding the search field and the sort control. */
+@Composable
+private fun ShelfToolbar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    onSortClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(28.dp)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .shadow(
+                elevation = 12.dp,
+                shape = shape,
+                ambientColor = Ink.copy(alpha = 0.18f),
+                spotColor = Ink.copy(alpha = 0.28f)
+            ),
+        shape = shape,
+        color = Color.White,
+        border = BorderStroke(1.dp, Line)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 10.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Mint,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = "Search",
+                        tint = Ink,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                cursorBrush = SolidColor(Ink),
+                modifier = Modifier.weight(1f),
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (query.isEmpty()) {
+                            Text(
+                                text = placeholder,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Sage,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Clear search",
+                        tint = Sage,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 6.dp)
+                    .width(1.dp)
+                    .height(26.dp)
+                    .background(Line)
+            )
+
+            // Sort control
+            Surface(
+                shape = CircleShape,
+                color = Ink,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onSortClick)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Box(
+                            modifier = Modifier
+                                .width(18.dp)
+                                .height(2.5.dp)
+                                .clip(CircleShape)
+                                .background(Paper)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(13.dp)
+                                .height(2.5.dp)
+                                .clip(CircleShape)
+                                .background(Paper)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(8.dp)
+                                .height(2.5.dp)
+                                .clip(CircleShape)
+                                .background(Amber)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun LibraryChip(
     label: String,
+    count: Int,
     selected: Boolean,
     onClick: () -> Unit
 ) {
@@ -1032,14 +1183,32 @@ private fun LibraryChip(
         color = if (selected) Ink else Color.White,
         border = if (selected) null else BorderStroke(1.dp, Line)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.SemiBold
-            ),
-            color = if (selected) Paper else Ink,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
-        )
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = if (selected) Paper else Ink
+            )
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = CircleShape,
+                color = if (selected) Amber else Mint
+            ) {
+                Text(
+                    text = count.toString(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Ink,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+        }
     }
 }
 
@@ -1230,21 +1399,13 @@ private fun SproutIllustration(modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun LibraryEyebrow(text: String, larger: Boolean = false) {
+private fun LibraryEyebrow(text: String) {
     Text(
         text = text,
-        style = if (larger) {
-            MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-                fontSize = 13.sp
-            )
-        } else {
-            MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp
-            )
-        },
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp
+        ),
         color = Sage
     )
 }
