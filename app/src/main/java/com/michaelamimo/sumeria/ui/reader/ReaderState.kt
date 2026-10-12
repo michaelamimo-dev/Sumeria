@@ -1,7 +1,10 @@
 package com.michaelamimo.sumeria.ui.reader
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import com.michaelamimo.sumeria.R
+import android.graphics.Typeface
 
 enum class ReaderTheme(
     val themeName: String,
@@ -43,12 +46,14 @@ enum class ReaderTheme(
 enum class ReaderFont(val fontName: String, val family: FontFamily) {
     System("System", FontFamily.Default),
     Serif("Serif", FontFamily.Serif),
-    Sans("Sans", FontFamily.SansSerif),
-    Mono("Mono", FontFamily.Monospace)
+    Sans("Sans", FontFamily(Font(R.font.reader_inter))),
+    Mono("Mono", FontFamily(Font(R.font.reader_jetbrains_mono))),
+    Cursive("Cursive", FontFamily(Typeface.create("cursive", Typeface.NORMAL)))
 }
 
 enum class ReadingMode { Text, Audio }
 enum class ReadingStyle { Scroll, Swipe }
+enum class TextAlignment(val label: String) { Justified("Justified"), Left("Left") }
 
 // Holds all customizable reading preferences
 data class ReaderPreferences(
@@ -58,5 +63,12 @@ data class ReaderPreferences(
     val lineSpacing: Float = 1.6f,
     val horizontalMargin: Int = 24,
     val readingStyle: ReadingStyle = ReadingStyle.Scroll,
+    val textAlignment: TextAlignment = TextAlignment.Justified,
     val isBookmarked: Boolean = false // Track bookmark state
+)
+
+data class ReaderBookmark(
+    val bookTitle: String,
+    val chapterTitle: String,
+    val chapterNumber: Int
 )

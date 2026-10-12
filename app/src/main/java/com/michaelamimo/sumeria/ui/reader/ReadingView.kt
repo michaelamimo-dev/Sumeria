@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
@@ -73,7 +74,7 @@ fun ReadingView(
                             fontSize = prefs.fontSize.sp,
                             lineHeight = (prefs.fontSize * prefs.lineSpacing).sp,
                             color = prefs.theme.text,
-                            textAlign = TextAlign.Justify,
+                            textAlign = if (prefs.textAlignment == TextAlignment.Left) TextAlign.Start else TextAlign.Justify,
                             modifier = Modifier.padding(bottom = 24.dp)
                         )
                     }
@@ -89,13 +90,20 @@ fun ReadingView(
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = 64.dp,
-                    start = prefs.horizontalMargin.dp,
-                    end = prefs.horizontalMargin.dp
-                )
+                pageSize = PageSize.Fill,
+                pageSpacing = 0.dp,
+                contentPadding = PaddingValues(0.dp)
             ) { page ->
-                Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            top = 64.dp,
+                            start = prefs.horizontalMargin.dp,
+                            end = prefs.horizontalMargin.dp,
+                            bottom = 32.dp
+                        )
+                ) {
                     if (page == 0) {
                         Text(
                             text = chapterTitle,
@@ -113,7 +121,7 @@ fun ReadingView(
                                 fontSize = prefs.fontSize.sp,
                                 lineHeight = (prefs.fontSize * prefs.lineSpacing).sp,
                                 color = prefs.theme.text,
-                                textAlign = TextAlign.Justify
+                                textAlign = if (prefs.textAlignment == TextAlignment.Left) TextAlign.Start else TextAlign.Justify
                             )
                         }
                     }

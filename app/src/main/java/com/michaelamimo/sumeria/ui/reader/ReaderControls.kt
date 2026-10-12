@@ -1,6 +1,10 @@
 package com.michaelamimo.sumeria.ui.reader
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,18 +15,18 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -37,106 +41,113 @@ fun ReaderOverlay(
     onBookmarkToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
+    var clockTime by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            clockTime = LocalTime.now()
+        }
+    }
+    val clockLabel = remember(clockTime) { clockTime.format(DateTimeFormatter.ofPattern("h:mm a")) }
+    val ink = prefs.theme.controlsContent
+    val accent = Color(0xFFE6B45C)
 
-        // Unified Bottom Console
+    Box(modifier = modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { -it / 3 }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { -it / 3 }),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                color = prefs.theme.controlsBackground.copy(alpha = 0.94f),
+                shape = RoundedCornerShape(22.dp),
+                shadowElevation = 10.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBackClick, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back to library", tint = ink)
+                    }
+                    Column(modifier = Modifier.weight(1f).padding(start = 5.dp)) {
+                        Text("THE 48 LAWS OF POWER", color = ink.copy(alpha = 0.68f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
+                        Text("Chapter One", color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                    IconButton(
+                        onClick = onBookmarkToggle,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .semantics { contentDescription = if (prefs.isBookmarked) "Remove bookmark" else "Add bookmark" }
+                    ) {
+                        Icon(
+                            imageVector = if (prefs.isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                            contentDescription = null,
+                            tint = if (prefs.isBookmarked) accent else ink,
+                            modifier = Modifier.size(23.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         AnimatedVisibility(
             visible = isVisible,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp, start = 16.dp, end = 16.dp)
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 22.dp)
         ) {
-            val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-            val currentTime = LocalTime.now().format(timeFormatter)
-
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-
-                // Subtle Time & Page indicator floating above the pill
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = prefs.theme.controlsBackground.copy(alpha = 0.8f)
-                ) {
-                    Text(
-                        text = "$currentTime  •  12 / 320",
-                        color = prefs.theme.controlsContent,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // The Main Control Pill
-                Surface(
-                    shape = RoundedCornerShape(32.dp),
-                    color = prefs.theme.controlsBackground,
-                    shadowElevation = 12.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    color = prefs.theme.controlsBackground.copy(alpha = 0.84f),
+                    shape = CircleShape,
+                    modifier = Modifier.padding(bottom = 12.dp)
                 ) {
                     Row(
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1. Back Button (Moved here for ergonomics & clean top screen)
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                imageVector = Icons.Rounded.ArrowBack,
-                                contentDescription = "Back",
-                                tint = prefs.theme.controlsContent
-                            )
+                        Text(clockLabel, color = ink.copy(alpha = 0.78f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.width(9.dp))
+                        Box(Modifier.size(5.dp).clip(CircleShape).background(accent))
+                        Spacer(Modifier.width(8.dp))
+                        Text("12", color = ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("  /  320", color = ink.copy(alpha = 0.62f), fontSize = 11.sp)
+                        Spacer(Modifier.width(9.dp))
+                        Box(Modifier.width(56.dp).height(2.dp).clip(CircleShape).background(ink.copy(alpha = 0.22f))) {
+                            Box(Modifier.fillMaxWidth(0.12f).fillMaxHeight().clip(CircleShape).background(accent))
                         }
+                    }
+                }
 
-                        // 2. Mode Switcher
-                        Surface(
-                            shape = RoundedCornerShape(24.dp),
-                            color = Color.Transparent,
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = prefs.theme.controlsBackground.copy(alpha = 0.97f),
+                    shadowElevation = 16.dp,
+                    tonalElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        ModeButton("Read", currentMode == ReadingMode.Text, ink, prefs.theme.controlsBackground) {
+                            onModeSwitch(ReadingMode.Text)
+                        }
+                        ModeButton("Listen", currentMode == ReadingMode.Audio, ink, prefs.theme.controlsBackground) {
+                            onModeSwitch(ReadingMode.Audio)
+                        }
+                        Box(Modifier.width(1.dp).height(24.dp).background(ink.copy(alpha = 0.2f)).padding(horizontal = 4.dp))
+                        IconButton(
+                            onClick = onSettingsClick,
+                            modifier = Modifier.size(44.dp).semantics { contentDescription = "Reading settings" }
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
-                                    .padding(4.dp)
-                            ) {
-                                ModeButton(
-                                    text = "Read",
-                                    isSelected = currentMode == ReadingMode.Text,
-                                    activeColor = prefs.theme.controlsContent,
-                                    activeTextColor = prefs.theme.controlsBackground,
-                                    inactiveTextColor = prefs.theme.controlsContent,
-                                    onClick = { onModeSwitch(ReadingMode.Text) }
-                                )
-                                ModeButton(
-                                    text = "Listen",
-                                    isSelected = currentMode == ReadingMode.Audio,
-                                    activeColor = prefs.theme.controlsContent,
-                                    activeTextColor = prefs.theme.controlsBackground,
-                                    inactiveTextColor = prefs.theme.controlsContent,
-                                    onClick = { onModeSwitch(ReadingMode.Audio) }
-                                )
-                            }
-                        }
-
-                        // 3. Bookmark Button
-                        IconButton(onClick = onBookmarkToggle) {
-                            Icon(
-                                imageVector = if (prefs.isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
-                                contentDescription = "Bookmark",
-                                tint = if (prefs.isBookmarked) Color(0xFFE6A843) else prefs.theme.controlsContent // Amber if bookmarked
-                            )
-                        }
-
-                        // 4. Settings Button
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(
-                                imageVector = Icons.Rounded.Tune,
-                                contentDescription = "Settings",
-                                tint = prefs.theme.controlsContent
-                            )
+                            Icon(Icons.Rounded.Tune, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
                         }
                     }
                 }
@@ -146,27 +157,15 @@ fun ReaderOverlay(
 }
 
 @Composable
-private fun ModeButton(
-    text: String,
-    isSelected: Boolean,
-    activeColor: Color,
-    activeTextColor: Color,
-    inactiveTextColor: Color,
-    onClick: () -> Unit
-) {
+private fun ModeButton(text: String, selected: Boolean, ink: Color, controlColor: Color, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) activeColor else Color.Transparent)
+            .clip(CircleShape)
+            .background(if (selected) ink else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 19.dp, vertical = 11.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            color = if (isSelected) activeTextColor else inactiveTextColor,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-            fontSize = 14.sp
-        )
+        Text(text, color = if (selected) controlColor else ink.copy(alpha = 0.78f), fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, fontSize = 13.sp)
     }
 }

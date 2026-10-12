@@ -3,6 +3,7 @@ package com.michaelamimo.sumeria.ui.reader
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.view.WindowManager
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -23,19 +24,41 @@ fun ReaderScreen(onNavigateBack: () -> Unit) {
     var currentMode by remember { mutableStateOf(ReadingMode.Text) }
     var overlayVisible by remember { mutableStateOf(true) }
     var showSettingsSheet by remember { mutableStateOf(false) }
-
-    // Enforce True Immersive Mode
-    DisposableEffect(Unit) {
-        val window = activity?.window
-        var insetsController: WindowInsetsControllerCompat? = null
-        if (window != null) {
-            insetsController = WindowCompat.getInsetsController(window, view)
-            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            insetsController.hide(WindowInsetsCompat.Type.systemBars()) // Hide status & nav bars completely
+    var bookmarks by remember { mutableStateOf(emptyList<ReaderBookmark>()) }
+    val currentBookmark = ReaderBookmark("The 48 Laws of Power", "Chapter One", 1)
+    val isCurrentChapterBookmarked = bookmarks.any { it == currentBookmark }
+    val toggleCurrentBookmark: () -> Unit = {
+        bookmarks = if (isCurrentChapterBookmarked) {
+            bookmarks.filterNot { it == currentBookmark }
+        } else {
+            (bookmarks + currentBookmark).distinct().sortedWith(compareBy<ReaderBookmark> { it.bookTitle }.thenBy { it.chapterNumber })
         }
+        prefs = prefs.copy(isBookmarked = !isCurrentChapterBookmarked)
+    }
+    val wasFullscreen = remember(activity) {
+        activity?.window?.let { it.attributes.flags and WindowManager.LayoutParams.FLAG_FULLSCREEN != 0 } ?: false
+    }
 
+    // Keep the reader immersive while its settings sheet is open as well.
+    SideEffect {
+        activity?.window?.let { window ->
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            WindowCompat.getInsetsController(window, view).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    DisposableEffect(activity) {
+        val window = activity?.window
         onDispose {
-            insetsController?.show(WindowInsetsCompat.Type.systemBars())
+            window?.let {
+                if (wasFullscreen) it.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                else it.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                WindowCompat.getInsetsController(it, view).show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -60,11 +83,13 @@ fun ReaderScreen(onNavigateBack: () -> Unit) {
                         onBackClick = onNavigateBack,
                         onModeSwitch = { currentMode = it; overlayVisible = true },
                         onSettingsClick = { showSettingsSheet = true },
-                        onBookmarkToggle = { prefs = prefs.copy(isBookmarked = !prefs.isBookmarked) }
+                        onBookmarkToggle = toggleCurrentBookmark
                     )
                 }
                 ReadingMode.Audio -> {
                     AudioPlayerView(
+                        isBookmarked = isCurrentChapterBookmarked,
+                        onBookmarkToggle = toggleCurrentBookmark,
                         onBackToText = { currentMode = ReadingMode.Text }
                     )
                 }
@@ -75,6 +100,8 @@ fun ReaderScreen(onNavigateBack: () -> Unit) {
             ReaderSettingsSheet(
                 prefs = prefs,
                 onPrefsChange = { prefs = it },
+                bookmarks = bookmarks,
+                onReset = { prefs = ReaderPreferences(isBookmarked = isCurrentChapterBookmarked) },
                 onDismiss = { showSettingsSheet = false }
             )
         }
