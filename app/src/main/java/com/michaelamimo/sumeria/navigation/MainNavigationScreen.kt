@@ -43,6 +43,7 @@ import androidx.navigation.compose.rememberNavController
 import com.michaelamimo.sumeria.ui.home.HomeScreen
 import com.michaelamimo.sumeria.ui.library.LibraryScreen
 import com.michaelamimo.sumeria.ui.reader.ReaderScreen
+import com.michaelamimo.sumeria.ui.settings.SettingsScreen
 import com.michaelamimo.sumeria.ui.stats.StatsScreen
 import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 
@@ -114,7 +115,7 @@ fun MainNavigationScreen() {
             }
 
             composable(Screen.Settings.route) {
-                PlaceholderScreen("Settings")
+                SettingsScreen()
             }
         }
     }
