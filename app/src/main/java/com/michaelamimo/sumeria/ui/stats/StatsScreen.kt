@@ -28,14 +28,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
@@ -78,6 +76,15 @@ private val Line = Ink.copy(alpha = 0.08f)
 
 private const val SIDE = 24 // horizontal page margin, matches Home and Library
 
+private val MonthNames = listOf(
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+)
+private val MonthFullNames = listOf(
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+)
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
@@ -101,7 +108,7 @@ fun StatsScreen() {
     val today = remember { StatsMockRepository.today() }
     val clock = remember { StatsMockRepository.readingClock() }
     val genres = remember { StatsMockRepository.genres() }
-    val heatmap = remember { StatsMockRepository.heatmap() }
+    val heatmapWeeks = remember { StatsMockRepository.heatmapWeeks() }
     val badges = remember { StatsMockRepository.badges() }
     val recentBooks = remember { StatsMockRepository.recentBooks() }
     val yearGoal = remember { StatsMockRepository.yearGoal() }
@@ -237,14 +244,15 @@ fun StatsScreen() {
 
             // Consistency heatmap
             item {
-                val activeDays = heatmap.count { it > 0 }
+                val allCells = heatmapWeeks.flatMap { it.cells }
+                val activeDays = allCells.count { it.minutes > 0 }
                 StatsSectionHeader(
                     eyebrow = "CONSISTENCY",
                     title = "Last 5 weeks",
-                    trailing = "$activeDays of ${heatmap.size} days"
+                    trailing = "$activeDays of ${allCells.size} days"
                 )
                 Spacer(Modifier.height(16.dp))
-                HeatmapCard(minutes = heatmap, goal = today.goalMinutes)
+                HeatmapCard(weeks = heatmapWeeks, goal = today.goalMinutes)
                 Spacer(Modifier.height(32.dp))
             }
 
@@ -406,7 +414,10 @@ private fun StatsHeader(streak: Int) {
                     },
                 contentAlignment = Alignment.Center
             ) {
-                StatsIllustration(
+                Image(
+                    painter = painterResource(id = R.drawable.ic_stats_screen_top),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
@@ -1390,10 +1401,13 @@ private fun YearGoalCard(goal: YearGoal) {
                     }
                 }
 
-                YearSprout(
+                Image(
+                    painter = painterResource(id = R.drawable.ic_stats_screen_goals),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .width(72.dp)
-                        .height(88.dp)
+                        .width(96.dp)
+                        .height(92.dp)
                 )
             }
 
@@ -1461,13 +1475,37 @@ private fun GoalFact(
 }
 
 // ---------------------------------------------------------------------------
-// Heatmap
+// Heatmap (with week date ranges and month dividers)
 // ---------------------------------------------------------------------------
 
+private data class HeatCell(
+    val minutes: Int,
+    val day: Int,
+    val month: Int, // 1..12
+    val year: Int
+)
+
+private data class HeatWeek(val cells: List<HeatCell>)
+
+/** "Sep 7 – 13", or "Sep 28 –\nOct 4" when the week crosses a month. */
+private fun HeatWeek.rangeLabel(): String {
+    val first = cells.first()
+    val last = cells.last()
+    return if (first.month == last.month) {
+        "${MonthNames[first.month - 1]} ${first.day} – ${last.day}"
+    } else {
+        "${MonthNames[first.month - 1]} ${first.day} –\n${MonthNames[last.month - 1]} ${last.day}"
+    }
+}
+
 @Composable
-private fun HeatmapCard(minutes: List<Int>, goal: Int) {
+private fun HeatmapCard(weeks: List<HeatWeek>, goal: Int) {
     val letters = listOf("M", "T", "W", "T", "F", "S", "S")
-    val weeks = minutes.chunked(7)
+    val allCells = weeks.flatMap { it.cells }
+    val firstCell = allCells.first()
+    val lastCell = allCells.last()
+    val labelWidth = 64.dp
+    val cellGap = 6.dp
 
     Surface(
         modifier = Modifier
@@ -1478,46 +1516,141 @@ private fun HeatmapCard(minutes: List<Int>, goal: Int) {
         border = BorderStroke(1.dp, Line)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
+            // Overall date span
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                letters.forEach { letter ->
+                Text(
+                    text = "${MonthNames[firstCell.month - 1]} ${firstCell.day} – " +
+                            "${MonthNames[lastCell.month - 1]} ${lastCell.day}, ${lastCell.year}".uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.1.sp
+                    ),
+                    color = Sage
+                )
+                Surface(shape = CircleShape, color = Mint) {
                     Text(
-                        text = letter,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center,
+                        text = "${weeks.size} weeks",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color = Sage
+                        color = Ink,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(14.dp))
 
-            weeks.forEachIndexed { weekIndex, week ->
+            // Weekday letters, aligned with the grid
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.width(labelWidth))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(cellGap)
                 ) {
-                    week.forEachIndexed { dayIndex, value ->
-                        val isToday = weekIndex == weeks.lastIndex && dayIndex == week.lastIndex
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(30.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(heatColor(value, goal))
-                                .then(
-                                    if (isToday) Modifier.border(2.dp, Ink, RoundedCornerShape(9.dp))
-                                    else if (value == 0) Modifier.border(1.dp, Line, RoundedCornerShape(9.dp))
-                                    else Modifier
-                                )
+                    letters.forEach { letter ->
+                        Text(
+                            text = letter,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Sage
                         )
                     }
                 }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            weeks.forEachIndexed { weekIndex, week ->
+                val weekStartMonth = week.cells.first().month
+                val previousStartMonth = weeks.getOrNull(weekIndex - 1)?.cells?.first()?.month
+
+                // Month divider where a new month begins
+                if (weekStartMonth != previousStartMonth) {
+                    val monthYear = week.cells.first().year
+                    val monthCells = allCells.filter {
+                        it.month == weekStartMonth && it.year == monthYear
+                    }
+                    Spacer(Modifier.height(if (weekIndex == 0) 4.dp else 12.dp))
+                    MonthDivider(
+                        name = MonthFullNames[weekStartMonth - 1],
+                        readDays = monthCells.count { it.minutes > 0 },
+                        totalDays = monthCells.size
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = week.rangeLabel(),
+                        modifier = Modifier.width(labelWidth),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = Ink.copy(alpha = 0.7f)
+                    )
+
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(cellGap)
+                    ) {
+                        week.cells.forEachIndexed { dayIndex, cell ->
+                            val isToday = weekIndex == weeks.lastIndex &&
+                                    dayIndex == week.cells.lastIndex
+                            val isMonthStart = cell.day == 1
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(heatColor(cell.minutes, goal))
+                                    .then(
+                                        if (isToday) Modifier.border(2.dp, Ink, RoundedCornerShape(9.dp))
+                                        else if (cell.minutes == 0) Modifier.border(1.dp, Line, RoundedCornerShape(9.dp))
+                                        else Modifier
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    if (isMonthStart) {
+                                        Text(
+                                            text = MonthNames[cell.month - 1],
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 7.sp,
+                                                lineHeight = 8.sp,
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = heatTextColor(cell.minutes, goal)
+                                        )
+                                    }
+                                    Text(
+                                        text = "${cell.day}",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            lineHeight = 11.sp,
+                                            fontWeight = if (isToday || isMonthStart) FontWeight.Bold else FontWeight.Medium
+                                        ),
+                                        color = heatTextColor(cell.minutes, goal)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (weekIndex != weeks.lastIndex) Spacer(Modifier.height(6.dp))
             }
 
@@ -1565,6 +1698,42 @@ private fun HeatmapCard(minutes: List<Int>, goal: Int) {
     }
 }
 
+@Composable
+private fun MonthDivider(
+    name: String,
+    readDays: Int,
+    totalDays: Int
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = name.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            ),
+            color = Ink.copy(alpha = 0.6f)
+        )
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(Line)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = "$readDays of $totalDays days",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = Sage
+        )
+    }
+}
+
 private fun heatColor(minutes: Int, goal: Int): Color {
     return when {
         minutes <= 0 -> Mint
@@ -1572,6 +1741,14 @@ private fun heatColor(minutes: Int, goal: Int): Color {
         minutes < 30 -> Teal.copy(alpha = 0.55f)
         minutes < goal -> Teal.copy(alpha = 0.85f)
         else -> Green
+    }
+}
+
+private fun heatTextColor(minutes: Int, goal: Int): Color {
+    return when {
+        minutes >= goal -> Paper
+        minutes <= 0 -> Sage
+        else -> Ink.copy(alpha = 0.7f)
     }
 }
 
@@ -1867,7 +2044,10 @@ private fun StatsFooter() {
             .padding(horizontal = SIDE.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        StatsFooterIllustration(
+        Image(
+            painter = painterResource(id = R.drawable.ic_stats_screen_bottom),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(190.dp)
@@ -1891,244 +2071,6 @@ private fun StatsFooter() {
             ),
             color = Ink
         )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Illustrations (drawn in Compose; swap for SVG assets whenever you like)
-// ---------------------------------------------------------------------------
-
-/** Header: three rising bars, a trend line, a sun and a sprout. */
-@Composable
-private fun StatsIllustration(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val strokeW = 2.5.dp.toPx()
-        val base = h * 0.88f
-
-        // Sun
-        drawCircle(
-            color = Amber,
-            radius = w * 0.07f,
-            center = Offset(w * 0.2f, h * 0.18f)
-        )
-
-        // Bars
-        val barW = w * 0.2f
-        val barSpecs = listOf(
-            Triple(0.12f, 0.28f, Teal.copy(alpha = 0.6f)),
-            Triple(0.40f, 0.46f, Teal),
-            Triple(0.68f, 0.64f, Ink)
-        )
-        barSpecs.forEach { (x, heightFraction, color) ->
-            val top = base - h * heightFraction
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(w * x, top),
-                size = Size(barW, base - top),
-                cornerRadius = CornerRadius(10.dp.toPx())
-            )
-        }
-
-        // Trend line over the bars
-        val points = listOf(
-            Offset(w * 0.22f, base - h * 0.28f - 16.dp.toPx()),
-            Offset(w * 0.50f, base - h * 0.46f - 16.dp.toPx()),
-            Offset(w * 0.78f, base - h * 0.64f - 16.dp.toPx())
-        )
-        for (i in 0 until points.size - 1) {
-            drawLine(
-                color = Coral,
-                start = points[i],
-                end = points[i + 1],
-                strokeWidth = strokeW,
-                cap = StrokeCap.Round
-            )
-        }
-        points.forEach { point ->
-            drawCircle(color = Color.White, radius = 5.dp.toPx(), center = point)
-            drawCircle(
-                color = Coral,
-                radius = 5.dp.toPx(),
-                center = point,
-                style = Stroke(width = strokeW)
-            )
-        }
-
-        // Sprout at the right
-        val sx = w * 0.95f
-        drawLine(
-            color = Ink,
-            start = Offset(sx, base),
-            end = Offset(sx, base - h * 0.2f),
-            strokeWidth = strokeW,
-            cap = StrokeCap.Round
-        )
-        rotate(degrees = -35f, pivot = Offset(sx, base - h * 0.14f)) {
-            drawOval(
-                color = Teal,
-                topLeft = Offset(sx - w * 0.1f, base - h * 0.26f),
-                size = Size(w * 0.1f, h * 0.09f)
-            )
-        }
-        rotate(degrees = 35f, pivot = Offset(sx, base - h * 0.1f)) {
-            drawOval(
-                color = Green,
-                topLeft = Offset(sx, base - h * 0.2f),
-                size = Size(w * 0.1f, h * 0.09f)
-            )
-        }
-
-        // Ground
-        drawLine(
-            color = Ink,
-            start = Offset(w * 0.04f, base),
-            end = Offset(w * 0.98f, base),
-            strokeWidth = strokeW,
-            cap = StrokeCap.Round
-        )
-    }
-}
-
-/** Year goal card: a small growing sprout. */
-@Composable
-private fun YearSprout(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val strokeW = 2.5.dp.toPx()
-
-        // Pot
-        val potPath = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * 0.22f, h * 0.72f)
-            lineTo(w * 0.78f, h * 0.72f)
-            lineTo(w * 0.68f, h * 1.0f)
-            lineTo(w * 0.32f, h * 1.0f)
-            close()
-        }
-        drawPath(path = potPath, color = Coral)
-
-        // Stem
-        drawLine(
-            color = Ink,
-            start = Offset(w * 0.5f, h * 0.72f),
-            end = Offset(w * 0.5f, h * 0.3f),
-            strokeWidth = strokeW,
-            cap = StrokeCap.Round
-        )
-        rotate(degrees = -35f, pivot = Offset(w * 0.5f, h * 0.45f)) {
-            drawOval(
-                color = Teal,
-                topLeft = Offset(w * 0.08f, h * 0.22f),
-                size = Size(w * 0.42f, h * 0.2f)
-            )
-        }
-        rotate(degrees = 35f, pivot = Offset(w * 0.5f, h * 0.5f)) {
-            drawOval(
-                color = Green,
-                topLeft = Offset(w * 0.5f, h * 0.32f),
-                size = Size(w * 0.42f, h * 0.2f)
-            )
-        }
-    }
-}
-
-/** Footer: a stack of books beside a little bar chart. */
-@Composable
-private fun StatsFooterIllustration(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val strokeW = 2.5.dp.toPx()
-        val base = h * 0.92f
-        val bookH = h * 0.14f
-
-        // Ground
-        drawLine(
-            color = Ink,
-            start = Offset(w * 0.04f, base),
-            end = Offset(w * 0.96f, base),
-            strokeWidth = strokeW,
-            cap = StrokeCap.Round
-        )
-
-        // Book stack (bottom to top)
-        val books = listOf(
-            Triple(0.14f, 0.40f, Ink),
-            Triple(0.18f, 0.34f, Teal),
-            Triple(0.12f, 0.38f, Coral),
-            Triple(0.20f, 0.30f, LavenderDeep)
-        )
-        var y = base
-        books.forEach { (xFrac, wFrac, color) ->
-            y -= bookH
-            val bx = w * xFrac
-            val bw = w * wFrac
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(bx, y),
-                size = Size(bw, bookH),
-                cornerRadius = CornerRadius(4.dp.toPx())
-            )
-            drawRoundRect(
-                color = Color.White,
-                topLeft = Offset(bx + bw * 0.12f, y + bookH * 0.3f),
-                size = Size(bw * 0.76f, bookH * 0.4f),
-                cornerRadius = CornerRadius(3.dp.toPx())
-            )
-        }
-
-        // Sprout on top of the stack
-        val sx = w * 0.20f + w * 0.15f
-        drawLine(
-            color = Ink,
-            start = Offset(sx, y),
-            end = Offset(sx, y - h * 0.16f),
-            strokeWidth = strokeW,
-            cap = StrokeCap.Round
-        )
-        rotate(degrees = -35f, pivot = Offset(sx, y - h * 0.1f)) {
-            drawOval(
-                color = Teal,
-                topLeft = Offset(sx - w * 0.08f, y - h * 0.2f),
-                size = Size(w * 0.08f, h * 0.07f)
-            )
-        }
-        rotate(degrees = 35f, pivot = Offset(sx, y - h * 0.08f)) {
-            drawOval(
-                color = Green,
-                topLeft = Offset(sx, y - h * 0.15f),
-                size = Size(w * 0.08f, h * 0.07f)
-            )
-        }
-
-        // Little bar chart on the right
-        val chartBars = listOf(
-            Triple(0.62f, 0.2f, Teal.copy(alpha = 0.55f)),
-            Triple(0.73f, 0.34f, Teal),
-            Triple(0.84f, 0.5f, Ink)
-        )
-        val cw = w * 0.08f
-        chartBars.forEach { (xFrac, hFrac, color) ->
-            val top = base - h * hFrac
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(w * xFrac, top),
-                size = Size(cw, base - top),
-                cornerRadius = CornerRadius(8.dp.toPx())
-            )
-        }
-        // Coral marker above the tallest bar
-        drawCircle(
-            color = Coral,
-            radius = 6.dp.toPx(),
-            center = Offset(w * 0.84f + cw / 2, base - h * 0.5f - 16.dp.toPx())
-        )
-
-        // Floating dots
-        drawCircle(Amber, radius = 5.dp.toPx(), center = Offset(w * 0.08f, h * 0.2f))
-        drawCircle(Teal, radius = 4.dp.toPx(), center = Offset(w * 0.55f, h * 0.18f))
     }
 }
 
@@ -2218,6 +2160,12 @@ private fun formatDuration(minutes: Int): String {
 }
 
 private fun formatNumber(value: Int): String = "%,d".format(value)
+
+private fun daysInMonth(year: Int, month: Int): Int = when (month) {
+    4, 6, 9, 11 -> 30
+    2 -> if ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0) 29 else 28
+    else -> 31
+}
 
 private fun Context.findActivity(): Activity? {
     var currentContext = this
@@ -2406,14 +2354,38 @@ private object StatsMockRepository {
 
     fun yearGoal() = YearGoal(year = 2026, finished = 14, target = 18, monthsLeft = 2.7f)
 
-    /** 35 days, oldest first. Last cell is today (Sunday). Rows are Mon..Sun. */
-    fun heatmap(): List<Int> = listOf(
-        20, 35, 0, 15, 40, 22, 30,
-        25, 0, 0, 30, 45, 50, 18,
-        30, 42, 38, 0, 18, 55, 48,
-        22, 40, 15, 36, 0, 60, 0,
-        28, 45, 18, 52, 36, 61, 32
-    )
+    /**
+     * 35 days of reading minutes, oldest first, grouped into Mon..Sun weeks.
+     * The first cell is Mon Sep 7, 2026 and the last is today, Sun Oct 11, 2026.
+     */
+    fun heatmapWeeks(): List<HeatWeek> {
+        val minutes = listOf(
+            20, 35, 0, 15, 40, 22, 30,
+            25, 0, 0, 30, 45, 50, 18,
+            30, 42, 38, 0, 18, 55, 48,
+            22, 40, 15, 36, 0, 60, 0,
+            28, 45, 18, 52, 36, 61, 32
+        )
+
+        var year = 2026
+        var month = 9
+        var day = 7
+
+        val cells = minutes.map { value ->
+            val cell = HeatCell(minutes = value, day = day, month = month, year = year)
+            day++
+            if (day > daysInMonth(year, month)) {
+                day = 1
+                month++
+                if (month > 12) {
+                    month = 1
+                    year++
+                }
+            }
+            cell
+        }
+        return cells.chunked(7).map { HeatWeek(it) }
+    }
 
     fun badges() = listOf(
         Badge("📘", "First book", "Earned Feb 12", 1f, Mint),
