@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +42,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.michaelamimo.sumeria.ui.home.HomeScreen
 import com.michaelamimo.sumeria.ui.library.LibraryScreen
+import com.michaelamimo.sumeria.ui.reader.ReaderScreen
 import com.michaelamimo.sumeria.ui.stats.StatsScreen
 import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 
@@ -50,33 +50,39 @@ import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 fun MainNavigationScreen() {
     val bottomNavController = rememberNavController()
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
-    val currentRoute =
-        navBackStackEntry?.destination?.route ?: Screen.Home.route
+    val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
+    val isReaderScreen = currentRoute == Screen.Reader.route
 
     Scaffold(
         bottomBar = {
-            SumeriaBottomNavigationBar(
-                currentRoute = currentRoute,
-                onNavigate = { route ->
-                    bottomNavController.navigate(route) {
-                        popUpTo(
-                            bottomNavController.graph.findStartDestination().id
-                        ) {
-                            saveState = true
+            // Hide the bottom navigation bar completely when in the Reader.
+            if (!isReaderScreen) {
+                SumeriaBottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onNavigate = { route ->
+                        bottomNavController.navigate(route) {
+                            popUpTo(
+                                bottomNavController.graph.findStartDestination().id
+                            ) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-
-                        launchSingleTop = true
-                        restoreState = true
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         NavHost(
             navController = bottomNavController,
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(
-                bottom = innerPadding.calculateBottomPadding()
+                bottom = if (isReaderScreen) {
+                    0.dp
+                } else {
+                    innerPadding.calculateBottomPadding()
+                }
             )
         ) {
             composable(Screen.Home.route) {
@@ -88,7 +94,19 @@ fun MainNavigationScreen() {
             }
 
             composable(Screen.Reader.route) {
-                PlaceholderScreen("Reader")
+                ReaderScreen(
+                    onNavigateBack = {
+                        bottomNavController.navigate(Screen.Home.route) {
+                            popUpTo(
+                                bottomNavController.graph.findStartDestination().id
+                            ) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
 
             composable(Screen.Stats.route) {
@@ -143,15 +161,14 @@ fun SumeriaBottomNavigationBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .height(62.dp)
-                .padding(horizontal = 8.dp),
+                .height(52.dp)
+                .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEach { item ->
                 val isSelected = currentRoute == item.route
 
-                // Each item gets an equal-width cell, spreading the icons
-                // across the full navigation bar.
+                // Equal-width cells keep the icons spread across the bar.
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -170,7 +187,7 @@ fun SumeriaBottomNavigationBar(
                                     Color.Transparent
                                 }
                             )
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -182,10 +199,10 @@ fun SumeriaBottomNavigationBar(
                             } else {
                                 SumeriaColors.Muted.copy(alpha = 0.70f)
                             },
-                            modifier = Modifier.size(26.dp)
+                            modifier = Modifier.size(23.dp)
                         )
 
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(1.dp))
 
                         Text(
                             text = item.label,
@@ -194,7 +211,7 @@ fun SumeriaBottomNavigationBar(
                             } else {
                                 SumeriaColors.Muted.copy(alpha = 0.70f)
                             },
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             fontWeight = if (isSelected) {
                                 FontWeight.SemiBold
                             } else {
@@ -226,9 +243,7 @@ fun PlaceholderScreen(title: String) {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineLarge.copy(
