@@ -1,5 +1,7 @@
 package com.michaelamimo.sumeria.navigation
 
+import android.net.Uri
+
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Onboarding : Screen("onboarding")
@@ -12,7 +14,10 @@ sealed class Screen(val route: String) {
     // The 5 individual tabs
     object Home : Screen("home")
     object Library : Screen("library")
-    object Reader : Screen("reader")
+    object Reader : Screen("reader") {
+        const val bookRoute = "reader/{bookId}"
+        fun forBook(bookId: String): String = "reader/${Uri.encode(bookId)}"
+    }
     object Stats : Screen("stats")
     object Settings : Screen("settings")
 }

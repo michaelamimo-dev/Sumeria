@@ -34,6 +34,10 @@ import java.time.format.DateTimeFormatter
 fun ReaderOverlay(
     isVisible: Boolean,
     prefs: ReaderPreferences,
+    bookTitle: String,
+    sectionTitle: String,
+    progressLabel: String,
+    progression: Float,
     currentMode: ReadingMode,
     onBackClick: () -> Unit,
     onModeSwitch: (ReadingMode) -> Unit,
@@ -76,8 +80,8 @@ fun ReaderOverlay(
                         Icon(Icons.Rounded.ArrowBack, contentDescription = "Back to library", tint = ink)
                     }
                     Column(modifier = Modifier.weight(1f).padding(start = 5.dp)) {
-                        Text("THE 48 LAWS OF POWER", color = ink.copy(alpha = 0.68f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
-                        Text("Chapter One", color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(bookTitle.uppercase(), color = ink.copy(alpha = 0.68f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, maxLines = 1)
+                        Text(sectionTitle, color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                     IconButton(
                         onClick = onBookmarkToggle,
@@ -116,11 +120,10 @@ fun ReaderOverlay(
                         Spacer(Modifier.width(9.dp))
                         Box(Modifier.size(5.dp).clip(CircleShape).background(accent))
                         Spacer(Modifier.width(8.dp))
-                        Text("12", color = ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("  /  320", color = ink.copy(alpha = 0.62f), fontSize = 11.sp)
+                        Text(progressLabel, color = ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(9.dp))
                         Box(Modifier.width(56.dp).height(2.dp).clip(CircleShape).background(ink.copy(alpha = 0.22f))) {
-                            Box(Modifier.fillMaxWidth(0.12f).fillMaxHeight().clip(CircleShape).background(accent))
+                            Box(Modifier.fillMaxWidth(progression.coerceIn(0f, 1f)).fillMaxHeight().clip(CircleShape).background(accent))
                         }
                     }
                 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
@@ -17,31 +18,57 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.michaelamimo.sumeria.domain.model.ReaderSection
+import kotlinx.coroutines.flow.distinctUntilChanged
+
+private data class ReaderBlock(
+    val sectionIndex: Int,
+    val text: String,
+    val isHeading: Boolean
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReadingView(
+    sections: List<ReaderSection>,
+    initialBlockIndex: Int,
+    initialScrollOffset: Int,
     prefs: ReaderPreferences,
     onToggleOverlay: () -> Unit,
-    onScroll: () -> Unit
+    onScroll: () -> Unit,
+    onPositionChanged: (blockIndex: Int, sectionIndex: Int, scrollOffset: Int) -> Unit
 ) {
-    val chapterTitle = "Chapter One: The Fundamentals"
-    val paragraphs = listOf(
-        "Design is not just what it looks like and feels like. Design is how it works. When we observe the physical world, affordances provide strong clues to the operations of things. Plates are for pushing. Knobs are for turning. Slots are for inserting things into. But in the digital realm, we must rely on signifiers.",
-        "Signifiers communicate where the action should take place. We need them because, unlike the physical world, the digital screen is flat. Without a visual cue—a shadow, a border, a specific color—a user cannot know what is interactive and what is merely decorative.",
-        "As we shift from physical to digital, the principles of human-centered design remain our anchor. We must build systems that adapt to the user, rather than forcing the user to adapt to the system. This means understanding psychology, cognition, and the beautiful imperfections of human memory.",
-        "Consider the reading experience itself. For centuries, ink on paper was the pinnacle of typographic evolution. Today, we have the power to change the font, the contrast, and the spacing in an instant. Yet, the goal remains identical: to immerse the reader in the narrative completely, removing the medium from their conscious awareness.",
-        "When typography is invisible, it is working. The moment a reader notices the font, they have stopped reading the text. Our duty as designers is to craft that invisible bridge between the author's mind and the reader's imagination."
-    )
+    val blocks = remember(sections) {
+        sections.flatMapIndexed { sectionIndex, section ->
+            buildList {
+                add(ReaderBlock(sectionIndex, section.title, isHeading = true))
+                section.paragraphs.forEach { paragraph ->
+                    add(ReaderBlock(sectionIndex, paragraph, isHeading = false))
+                }
+            }
+        }
+    }
+    val startIndex = initialBlockIndex.coerceIn(0, (blocks.size - 1).coerceAtLeast(0))
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) { detectTapGestures(onTap = { onToggleOverlay() }) }
     ) {
+        if (blocks.isEmpty()) return@Box
+
         if (prefs.readingStyle == ReadingStyle.Scroll) {
-            // SCROLL MODE
-            val listState = rememberLazyListState()
+            val listState = rememberLazyListState(
+                initialFirstVisibleItemIndex = startIndex,
+                initialFirstVisibleItemScrollOffset = initialScrollOffset.coerceAtLeast(0)
+            )
+            LaunchedEffect(listState, blocks) {
+                snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+                    .distinctUntilChanged()
+                    .collect { (index, offset) ->
+                        blocks.getOrNull(index)?.let { block -> onPositionChanged(index, block.sectionIndex, offset) }
+                    }
+            }
             LaunchedEffect(listState.isScrollInProgress) {
                 if (listState.isScrollInProgress) onScroll()
             }
@@ -50,39 +77,28 @@ fun ReadingView(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    top = 64.dp, // Natural top padding, no overlap issues
+                    top = 64.dp,
                     bottom = 180.dp,
                     start = prefs.horizontalMargin.dp,
                     end = prefs.horizontalMargin.dp
                 )
             ) {
-                item {
-                    Text(
-                        text = chapterTitle,
-                        fontFamily = prefs.font.family,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = (prefs.fontSize + 8).sp,
-                        color = prefs.theme.text,
-                        modifier = Modifier.padding(bottom = 32.dp)
-                    )
-                }
-                items(paragraphs.size) { index ->
-                    SelectionContainer {
-                        Text(
-                            text = paragraphs[index],
-                            fontFamily = prefs.font.family,
-                            fontSize = prefs.fontSize.sp,
-                            lineHeight = (prefs.fontSize * prefs.lineSpacing).sp,
-                            color = prefs.theme.text,
-                            textAlign = if (prefs.textAlignment == TextAlignment.Left) TextAlign.Start else TextAlign.Justify,
-                            modifier = Modifier.padding(bottom = 24.dp)
-                        )
-                    }
+                itemsIndexed(blocks) { _, block ->
+                    ReaderTextBlock(block, prefs)
                 }
             }
         } else {
-            // SWIPE MODE
-            val pagerState = rememberPagerState(pageCount = { paragraphs.size + 1 })
+            val pagerState = rememberPagerState(
+                initialPage = startIndex,
+                pageCount = { blocks.size }
+            )
+            LaunchedEffect(pagerState, blocks) {
+                snapshotFlow { pagerState.currentPage }
+                    .distinctUntilChanged()
+                    .collect { index ->
+                        blocks.getOrNull(index)?.let { block -> onPositionChanged(index, block.sectionIndex, 0) }
+                    }
+            }
             LaunchedEffect(pagerState.isScrollInProgress) {
                 if (pagerState.isScrollInProgress) onScroll()
             }
@@ -104,29 +120,35 @@ fun ReadingView(
                             bottom = 32.dp
                         )
                 ) {
-                    if (page == 0) {
-                        Text(
-                            text = chapterTitle,
-                            fontFamily = prefs.font.family,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = (prefs.fontSize + 8).sp,
-                            color = prefs.theme.text,
-                            modifier = Modifier.padding(bottom = 32.dp)
-                        )
-                    } else {
-                        SelectionContainer {
-                            Text(
-                                text = paragraphs[page - 1],
-                                fontFamily = prefs.font.family,
-                                fontSize = prefs.fontSize.sp,
-                                lineHeight = (prefs.fontSize * prefs.lineSpacing).sp,
-                                color = prefs.theme.text,
-                                textAlign = if (prefs.textAlignment == TextAlignment.Left) TextAlign.Start else TextAlign.Justify
-                            )
-                        }
-                    }
+                    ReaderTextBlock(blocks[page], prefs)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReaderTextBlock(block: ReaderBlock, prefs: ReaderPreferences) {
+    if (block.isHeading) {
+        Text(
+            text = block.text,
+            fontFamily = prefs.font.family,
+            fontWeight = FontWeight.Bold,
+            fontSize = (prefs.fontSize + 8).sp,
+            color = prefs.theme.text,
+            modifier = Modifier.padding(bottom = 32.dp)
+        )
+    } else {
+        SelectionContainer {
+            Text(
+                text = block.text,
+                fontFamily = prefs.font.family,
+                fontSize = prefs.fontSize.sp,
+                lineHeight = (prefs.fontSize * prefs.lineSpacing).sp,
+                color = prefs.theme.text,
+                textAlign = if (prefs.textAlignment == TextAlignment.Left) TextAlign.Start else TextAlign.Justify,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
         }
     }
 }

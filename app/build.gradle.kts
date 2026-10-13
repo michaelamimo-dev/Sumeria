@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -75,6 +76,8 @@ dependencies {
     implementation(libs.readium.shared)
     implementation(libs.readium.streamer)
     implementation(libs.readium.adapter.pdfium.document)
+    implementation(libs.pdfbox.android)
+    implementation(libs.jsoup)
 
     // Firebase BOM (Auth & Firestore for syncing)
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))

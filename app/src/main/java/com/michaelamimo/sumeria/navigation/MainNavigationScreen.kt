@@ -36,6 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -52,7 +54,7 @@ fun MainNavigationScreen() {
     val bottomNavController = rememberNavController()
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
-    val isReaderScreen = currentRoute == Screen.Reader.route
+    val isReaderScreen = currentRoute == Screen.Reader.route || currentRoute == Screen.Reader.bookRoute
 
     Scaffold(
         bottomBar = {
@@ -91,20 +93,34 @@ fun MainNavigationScreen() {
             }
 
             composable(Screen.Library.route) {
-                LibraryScreen()
+                LibraryScreen(onBookClick = { bookId ->
+                    bottomNavController.navigate(Screen.Reader.forBook(bookId))
+                })
             }
 
             composable(Screen.Reader.route) {
                 ReaderScreen(
                     onNavigateBack = {
-                        bottomNavController.navigate(Screen.Home.route) {
-                            popUpTo(
-                                bottomNavController.graph.findStartDestination().id
-                            ) {
-                                saveState = true
+                        if (!bottomNavController.popBackStack()) {
+                            bottomNavController.navigate(Screen.Home.route) {
+                                popUpTo(bottomNavController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
+                        }
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.Reader.bookRoute,
+                arguments = listOf(navArgument("bookId") { type = NavType.StringType })
+            ) {
+                ReaderScreen(
+                    onNavigateBack = {
+                        if (!bottomNavController.popBackStack()) {
+                            bottomNavController.navigate(Screen.Library.route) { launchSingleTop = true }
                         }
                     }
                 )

@@ -103,7 +103,10 @@ private const val SIDE = 24 // horizontal page margin, matches Home
 // ---------------------------------------------------------------------------
 
 @Composable
-fun LibraryScreen(viewModel: LibraryViewModel = hiltViewModel()) {
+fun LibraryScreen(
+    onBookClick: (String) -> Unit = {},
+    viewModel: LibraryViewModel = hiltViewModel()
+) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -138,7 +141,8 @@ fun LibraryScreen(viewModel: LibraryViewModel = hiltViewModel()) {
                 title = book.title,
                 author = book.authors.joinToString().ifBlank { "Unknown author" },
                 coverUrl = book.coverUri,
-                isCloud = false
+                isCloud = false,
+                id = book.id
             )
         }
     }
@@ -191,11 +195,13 @@ fun LibraryScreen(viewModel: LibraryViewModel = hiltViewModel()) {
                         collections = collections,
                         isImporting = uiState.isImporting,
                         onAddBooks = { showImportOptions = true },
+                        onBookClick = onBookClick,
                         onCollectionClick = { selectedCollection = it }
                     )
                 } else {
                     CollectionDetailView(
                         collection = selected,
+                        onBookClick = onBookClick,
                         onBackClick = { selectedCollection = null }
                     )
                 }
@@ -242,6 +248,7 @@ private fun CollectionsHome(
     collections: List<LibraryCollection>,
     isImporting: Boolean,
     onAddBooks: () -> Unit,
+    onBookClick: (String) -> Unit,
     onCollectionClick: (LibraryCollection) -> Unit
 ) {
     val allCollection = collections.firstOrNull { it.title.equals("All", ignoreCase = true) }
@@ -876,6 +883,7 @@ private enum class ShelfFilter(val label: String) {
 @Composable
 private fun CollectionDetailView(
     collection: LibraryCollection,
+    onBookClick: (String) -> Unit,
     onBackClick: () -> Unit
 ) {
     var filter by remember(collection) { mutableStateOf(ShelfFilter.All) }
@@ -970,7 +978,8 @@ private fun CollectionDetailView(
                 Box(Modifier.padding(horizontal = SIDE.dp)) {
                     BookShelfRow(
                         books = row,
-                        shelfColor = shelfColors[rowIndex % shelfColors.size]
+                        shelfColor = shelfColors[rowIndex % shelfColors.size],
+                        onBookClick = onBookClick
                     )
                 }
                 Spacer(Modifier.height(28.dp))
@@ -1337,7 +1346,8 @@ private fun LibraryChip(
 @Composable
 fun BookShelfRow(
     books: List<LibraryBook>,
-    shelfColor: Color
+    shelfColor: Color,
+    onBookClick: (String) -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // Covers resting on the plank
@@ -1360,7 +1370,7 @@ fun BookShelfRow(
             ) {
                 for (index in 0..2) {
                     if (index < books.size) {
-                        BookCover(book = books[index], modifier = Modifier.weight(1f))
+                        BookCover(book = books[index], modifier = Modifier.weight(1f), onBookClick = onBookClick)
                     } else {
                         Spacer(Modifier.weight(1f))
                     }
@@ -1393,7 +1403,8 @@ fun BookShelfRow(
 @Composable
 private fun BookCover(
     book: LibraryBook,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onBookClick: (String) -> Unit
 ) {
     Box(
         modifier = modifier
@@ -1401,7 +1412,7 @@ private fun BookCover(
             .shadow(4.dp, RoundedCornerShape(8.dp))
             .clip(RoundedCornerShape(8.dp))
             .combinedClickable(
-                onClick = { /* Open the reader. */ },
+                onClick = { book.id?.let(onBookClick) },
                 onLongClick = { /* Show book actions. */ }
             )
     ) {
@@ -1608,7 +1619,8 @@ data class LibraryBook(
     val title: String,
     val author: String,
     val coverUrl: String?,
-    val isCloud: Boolean = false
+    val isCloud: Boolean = false,
+    val id: String? = null
 )
 
 object MockLibraryRepository {
