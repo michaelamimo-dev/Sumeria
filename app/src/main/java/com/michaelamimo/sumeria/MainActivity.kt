@@ -21,7 +21,9 @@ import com.michaelamimo.sumeria.auth.SplashScreen
 import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 import com.michaelamimo.sumeria.ui.theme.SumeriaTheme
 import com.michaelamimo.sumeria.navigation.MainNavigationScreen
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

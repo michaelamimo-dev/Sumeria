@@ -1,8 +1,13 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.devtools.ksp") version "2.3.6"
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.ksp)
     id("com.google.gms.google-services") version "4.5.0"
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 android {
@@ -54,10 +59,14 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    // Room Database
-    implementation("androidx.room:room-runtime:2.8.4")
-    ksp("androidx.room:room-compiler:2.8.4")
-    implementation("androidx.room:room-ktx:2.8.4")
+    // Local-first persistence
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // Dependency injection
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 
     // Firebase BOM (Auth & Firestore for syncing)
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
