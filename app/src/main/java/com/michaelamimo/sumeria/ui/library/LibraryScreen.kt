@@ -3,7 +3,10 @@ package com.michaelamimo.sumeria.ui.library
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -32,10 +35,17 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +67,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.michaelamimo.sumeria.R
 
@@ -91,10 +103,53 @@ private const val SIDE = 24 // horizontal page margin, matches Home
 // ---------------------------------------------------------------------------
 
 @Composable
-fun LibraryScreen() {
-    var selectedCollection by remember { mutableStateOf<LibraryCollection?>(null) }
-    val collections = remember { MockLibraryRepository.getCollections() }
+fun LibraryScreen(viewModel: LibraryViewModel = hiltViewModel()) {
+    val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showImportOptions by remember { mutableStateOf(false) }
 
+    val openFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            viewModel.importFile(it)
+        }
+    }
+    val openFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            viewModel.scanFolder(it)
+        }
+    }
+
+    val importedBooks = remember(uiState.books) {
+        uiState.books.map { book ->
+            LibraryBook(
+                title = book.title,
+                author = book.authors.joinToString().ifBlank { "Unknown author" },
+                coverUrl = book.coverUri,
+                isCloud = false
+            )
+        }
+    }
+    val mockCollections = remember { MockLibraryRepository.getCollections() }
+    val collections = remember(importedBooks, mockCollections) {
+        mockCollections.map { collection ->
+            if (collection.title.equals("All", ignoreCase = true)) collection.copy(books = importedBooks)
+            else collection
+        }
+    }
+    var selectedCollection by remember { mutableStateOf<LibraryCollection?>(null) }
     val view = LocalView.current
     val activity = remember(view) { view.context.findActivity() }
 
@@ -109,31 +164,71 @@ fun LibraryScreen() {
         selectedCollection = null
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Paper)
-    ) {
-        // Fixed status-bar background, outside the scrolling content.
-        Box(
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearMessage()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(Paper)) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Ink)
-                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .fillMaxSize()
+                .background(Paper)
+        ) {
+            // Fixed status-bar background, outside the scrolling content.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Ink)
+                    .windowInsetsTopHeight(WindowInsets.statusBars)
+            )
+
+            Crossfade(targetState = selectedCollection, label = "library-content") { selected ->
+                if (selected == null) {
+                    CollectionsHome(
+                        collections = collections,
+                        isImporting = uiState.isImporting,
+                        onAddBooks = { showImportOptions = true },
+                        onCollectionClick = { selectedCollection = it }
+                    )
+                } else {
+                    CollectionDetailView(
+                        collection = selected,
+                        onBackClick = { selectedCollection = null }
+                    )
+                }
+            }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 16.dp)
         )
 
-        Crossfade(targetState = selectedCollection, label = "library-content") { selected ->
-            if (selected == null) {
-                CollectionsHome(
-                    collections = collections,
-                    onCollectionClick = { selectedCollection = it }
-                )
-            } else {
-                CollectionDetailView(
-                    collection = selected,
-                    onBackClick = { selectedCollection = null }
-                )
-            }
+        if (showImportOptions) {
+            AlertDialog(
+                onDismissRequest = { showImportOptions = false },
+                containerColor = Paper,
+                title = { Text("Add books", color = Ink, fontWeight = FontWeight.Bold) },
+                text = { Text("Choose EPUB or PDF files, or scan a folder you select.", color = Sage) },
+                confirmButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            showImportOptions = false
+                            openFilePicker.launch(arrayOf("application/pdf", "application/epub+zip", "application/epub"))
+                        }) { Text("Choose files", color = Ink) }
+                        TextButton(onClick = {
+                            showImportOptions = false
+                            openFolderPicker.launch(null)
+                        }) { Text("Scan folder", color = Ink) }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showImportOptions = false }) { Text("Cancel", color = Sage) }
+                }
+            )
         }
     }
 }
@@ -145,6 +240,8 @@ fun LibraryScreen() {
 @Composable
 private fun CollectionsHome(
     collections: List<LibraryCollection>,
+    isImporting: Boolean,
+    onAddBooks: () -> Unit,
     onCollectionClick: (LibraryCollection) -> Unit
 ) {
     val allCollection = collections.firstOrNull { it.title.equals("All", ignoreCase = true) }
@@ -157,7 +254,11 @@ private fun CollectionsHome(
     ) {
         item {
             Spacer(Modifier.height(20.dp))
-            LibraryHeader(totalBooks = allCollection?.books?.size ?: 0)
+            LibraryHeader(
+                totalBooks = allCollection?.books?.size ?: 0,
+                isImporting = isImporting,
+                onAddBooks = onAddBooks
+            )
             Spacer(Modifier.height(26.dp))
             SectionHeader(
                 eyebrow = "YOUR BOOK WORLD",
@@ -219,7 +320,7 @@ private fun CollectionsHome(
 // ---------------------------------------------------------------------------
 
 @Composable
-fun LibraryHeader(totalBooks: Int) {
+fun LibraryHeader(totalBooks: Int, isImporting: Boolean, onAddBooks: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -287,6 +388,27 @@ fun LibraryHeader(totalBooks: Int) {
                             ),
                             color = Ink
                         )
+                        Spacer(Modifier.width(2.dp))
+                        IconButton(
+                            onClick = onAddBooks,
+                            enabled = !isImporting,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            if (isImporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(17.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Ink
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = "Import EPUB or PDF books",
+                                    tint = Ink,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1485,7 +1607,7 @@ data class LibraryCollection(
 data class LibraryBook(
     val title: String,
     val author: String,
-    val coverUrl: String,
+    val coverUrl: String?,
     val isCloud: Boolean = false
 )
 

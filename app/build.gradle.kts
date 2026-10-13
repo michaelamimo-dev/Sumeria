@@ -32,6 +32,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -41,6 +42,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -67,6 +69,12 @@ dependencies {
     // Dependency injection
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
+
+    // EPUB/PDF publication parsing (Readium PDFium document adapter is open source)
+    implementation(libs.readium.shared)
+    implementation(libs.readium.streamer)
+    implementation(libs.readium.adapter.pdfium.document)
 
     // Firebase BOM (Auth & Firestore for syncing)
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
@@ -75,12 +83,6 @@ dependencies {
 
     // Dropbox Core API
     implementation("com.dropbox.core:dropbox-core-sdk:8.0.2")
-
-    // EPUB Parser via Maven Central
-    implementation("com.positiondev.epublib:epublib-core:3.1") {
-        exclude(group = "org.slf4j")
-        exclude(group = "xmlpull")
-    }
 
     // Compose Navigation
     implementation("androidx.navigation:navigation-compose:2.8.5")
