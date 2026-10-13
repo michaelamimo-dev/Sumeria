@@ -5,14 +5,15 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,13 +32,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.michaelamimo.sumeria.R
 import com.michaelamimo.sumeria.ui.theme.SumeriaTurtleLogo
 
 // ---------------------------------------------------------------------------
@@ -57,7 +62,7 @@ private val Teal = Color(0xFF6FD3B5)
 private val ErrorRed = Color(0xFFBA1A1A)
 private val Line = Ink.copy(alpha = 0.08f)
 
-private const val SIDE = 24 // Horizontal margin across all screens
+private const val SIDE = 24 // Horizontal margin across all main screens
 
 // ---------------------------------------------------------------------------
 // Main Settings Screen
@@ -77,37 +82,54 @@ fun SettingsScreen() {
         }
     }
 
-    // Interactive Settings State
+    // --- Interactive User & Preference States ---
     var userName by remember { mutableStateOf("Amimo Michael") }
     var userEmail by remember { mutableStateOf("michael@sumeria.app") }
-    var dailyGoalMinutes by remember { mutableIntStateOf(45) }
+
+    // Reading Goals & Preferences
+    var dailyGoalMinutes by remember { mutableIntStateOf(15) } // Scalable goal starting low (10, 15, 20, 25)
+    var yearlyBookGoal by remember { mutableIntStateOf(12) }
+    var challengeBooksCount by remember { mutableIntStateOf(5) }
     var defaultReaderTheme by remember { mutableStateOf("Light") }
     var pageTurnStyle by remember { mutableStateOf("Scroll") }
     var offlineDictionaries by remember { mutableStateOf("English (US) & Spanish (240 MB)") }
+    var selectedAudioVoice by remember { mutableStateOf("Sumeria Serene (Female)") }
 
+    // Connected Services & Cloud
+    var dropboxConnected by remember { mutableStateOf(true) }
+    var gdriveConnected by remember { mutableStateOf(false) }
+    var onedriveConnected by remember { mutableStateOf(false) }
     var autoCloudSync by remember { mutableStateOf(true) }
     var lastSyncTime by remember { mutableStateOf("Just now") }
     var isSyncing by remember { mutableStateOf(false) }
 
+    // Reminders & App Display
     var dailyReminders by remember { mutableStateOf(true) }
     var reminderTime by remember { mutableStateOf("8:00 PM") }
     var appThemeMode by remember { mutableStateOf("System") }
 
+    // Storage
     var cacheSize by remember { mutableStateOf("128 MB") }
 
-    // Dialog & Modal States
-    var showEditProfileDialog by remember { mutableStateOf(false) }
+    // --- Dialog & Modal Visibility States ---
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var showChangeEmailDialog by remember { mutableStateOf(false) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
+    var showYearlyGoalDialog by remember { mutableStateOf(false) }
+    var showDictionaryDialog by remember { mutableStateOf(false) }
+    var showVoiceSelectionDialog by remember { mutableStateOf(false) }
+    var showConnectedServicesDialog by remember { mutableStateOf(false) }
+    var showTimePickerDialog by remember { mutableStateOf(false) }
+    var showBadgesModal by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showDictionaryDialog by remember { mutableStateOf(false) }
-    var showTimePickerDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Paper)
     ) {
-        // Status-bar background (Ink green)
+        // Dark Green Status-Bar Background (Ink)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -117,9 +139,9 @@ fun SettingsScreen() {
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 120.dp) // Scroll clearance for floating nav bar
+            contentPadding = PaddingValues(bottom = 120.dp) // Clearance for floating bottom nav bar
         ) {
-            // 1. Header
+            // 1. Header with ic_settings illustration
             item {
                 Spacer(Modifier.height(20.dp))
                 SettingsHeader()
@@ -131,20 +153,56 @@ fun SettingsScreen() {
                 ProfileHeroCard(
                     name = userName,
                     email = userEmail,
-                    onEditProfileClick = { showEditProfileDialog = true }
+                    onEditNameClick = { showEditNameDialog = true },
+                    onViewBadgesClick = { showBadgesModal = true }
                 )
                 Spacer(Modifier.height(32.dp))
             }
 
-            // 3. Reading Goals & Preferences
+            // 3. Account & Security Section
             item {
                 SettingsSectionHeader(
-                    eyebrow = "READING GOALS & PREFERENCES",
-                    title = "Reading Defaults"
+                    eyebrow = "ACCOUNT & SECURITY",
+                    title = "Credentials & Security"
                 )
                 Spacer(Modifier.height(14.dp))
 
-                // Daily Goal Card
+                SettingCard {
+                    // Email Management Row
+                    SettingRow(
+                        icon = Icons.Rounded.Email,
+                        iconBg = Sky,
+                        title = "Email Address",
+                        subtitle = userEmail,
+                        actionText = "Change Email",
+                        onClick = { showChangeEmailDialog = true }
+                    )
+
+                    HorizontalDivider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
+
+                    // Password Management Row
+                    SettingRow(
+                        icon = Icons.Rounded.Lock,
+                        iconBg = Cream,
+                        title = "Password & Security",
+                        subtitle = "Update password and login credentials",
+                        actionText = "Change",
+                        onClick = { showChangePasswordDialog = true }
+                    )
+                }
+
+                Spacer(Modifier.height(32.dp))
+            }
+
+            // 4. Reading Goals & Preferences
+            item {
+                SettingsSectionHeader(
+                    eyebrow = "READING GOALS & PREFERENCES",
+                    title = "Goals & Reader Defaults"
+                )
+                Spacer(Modifier.height(14.dp))
+
+                // Daily Reading Goal Card
                 SettingCard {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -158,7 +216,7 @@ fun SettingsScreen() {
                                 color = Ink
                             )
                             Text(
-                                text = "Target duration to build your streak",
+                                text = "Target daily time to maintain reading habit",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Sage
                             )
@@ -179,12 +237,13 @@ fun SettingsScreen() {
 
                     Spacer(Modifier.height(16.dp))
 
+                    // Low-level scalable quick chips (10, 15, 20, 25)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        listOf(30, 45, 60, 90).forEach { mins ->
+                        listOf(10, 15, 20, 25).forEach { mins ->
                             ChoiceChip(
                                 text = "${mins}m",
                                 selected = dailyGoalMinutes == mins,
@@ -199,7 +258,7 @@ fun SettingsScreen() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
-                                onClick = { if (dailyGoalMinutes > 10) dailyGoalMinutes -= 5 },
+                                onClick = { if (dailyGoalMinutes > 5) dailyGoalMinutes -= 5 },
                                 modifier = Modifier
                                     .size(36.dp)
                                     .background(Mint, CircleShape)
@@ -220,7 +279,65 @@ fun SettingsScreen() {
 
                 Spacer(Modifier.height(12.dp))
 
-                // Default Reader Theme & Style Card
+                // Yearly Book Challenge Card
+                SettingCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Lavender,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.EmojiEvents,
+                                    contentDescription = "Yearly Challenge",
+                                    tint = Ink,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "2026 Yearly Book Challenge",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink
+                            )
+                            Text(
+                                text = "Target: $yearlyBookGoal books ($challengeBooksCount selected in challenge)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Sage
+                            )
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Mint,
+                            border = BorderStroke(1.dp, Line),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showYearlyGoalDialog = true }
+                        ) {
+                            Text(
+                                text = "Configure",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Default Reader Theme & Navigation Style Card
                 SettingCard {
                     Text(
                         text = "Default Reader Theme",
@@ -312,8 +429,9 @@ fun SettingsScreen() {
 
                 Spacer(Modifier.height(12.dp))
 
-                // Offline Dictionaries Card
+                // Offline Dictionaries & Audio Reader Voices Group Card
                 SettingCard {
+                    // Offline Dictionaries
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -368,21 +486,10 @@ fun SettingsScreen() {
                             )
                         }
                     }
-                }
 
-                Spacer(Modifier.height(32.dp))
-            }
+                    HorizontalDivider(color = Line, modifier = Modifier.padding(vertical = 16.dp))
 
-            // 4. Sync & Notifications
-            item {
-                SettingsSectionHeader(
-                    eyebrow = "SYNC & NOTIFICATIONS",
-                    title = "Cloud & Reminders"
-                )
-                Spacer(Modifier.height(14.dp))
-
-                // Cloud Sync Card
-                SettingCard {
+                    // Audio Reader Voices
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -394,8 +501,8 @@ fun SettingsScreen() {
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Rounded.CloudSync,
-                                    contentDescription = "Cloud Sync",
+                                    imageVector = Icons.Rounded.RecordVoiceOver,
+                                    contentDescription = "Audio Voices",
                                     tint = Ink,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -404,6 +511,164 @@ fun SettingsScreen() {
 
                         Spacer(Modifier.width(14.dp))
 
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Audio Reader Voice",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink
+                            )
+                            Text(
+                                text = selectedAudioVoice,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Sage,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Cream,
+                            border = BorderStroke(1.dp, Amber.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showVoiceSelectionDialog = true }
+                        ) {
+                            Text(
+                                text = "Voice",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(32.dp))
+            }
+
+            // 5. Achievements & Reading Tiers
+            item {
+                SettingsSectionHeader(
+                    eyebrow = "ACHIEVEMENTS & TIERS",
+                    title = "Milestones & Badges"
+                )
+                Spacer(Modifier.height(14.dp))
+
+                SettingCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Amber,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("✦", fontSize = 24.sp, color = Ink)
+                            }
+                        }
+
+                        Spacer(Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Scholar Tier Member",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink
+                            )
+                            Text(
+                                text = "42 Book Streak • 78% to Master Scholar",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Sage
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Mint,
+                            border = BorderStroke(1.dp, Line),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showBadgesModal = true }
+                        ) {
+                            Text(
+                                text = "All Badges",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Badges Quick Preview Strip
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val badgeList = listOf(
+                            "🔥" to "Streak Master",
+                            "💯" to "Centurion",
+                            "🦉" to "Night Owl",
+                            "🧭" to "Explorer",
+                            "📚" to "Collector"
+                        )
+                        items(badgeList) { (icon, badgeName) ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Cream,
+                                border = BorderStroke(1.dp, Amber.copy(alpha = 0.2f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(icon, fontSize = 14.sp)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = badgeName,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Ink
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(32.dp))
+            }
+
+            // 6. Connected Services & Cloud
+            item {
+                SettingsSectionHeader(
+                    eyebrow = "CONNECTED SERVICES & CLOUD",
+                    title = "Cloud Accounts & Backup"
+                )
+                Spacer(Modifier.height(14.dp))
+
+                SettingCard {
+                    // Connected Services Item
+                    SettingRow(
+                        icon = Icons.Rounded.CloudQueue,
+                        iconBg = Sky,
+                        title = "Third-Party Storage Accounts",
+                        subtitle = "Dropbox (${if (dropboxConnected) "Connected" else "Off"}), Drive, OneDrive",
+                        actionText = "Manage",
+                        onClick = { showConnectedServicesDialog = true }
+                    )
+
+                    HorizontalDivider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
+
+                    // Cloud Sync Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Library & Stats Sync",
@@ -417,8 +682,6 @@ fun SettingsScreen() {
                             )
                         }
 
-                        Spacer(Modifier.width(8.dp))
-
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = Cream,
@@ -427,9 +690,7 @@ fun SettingsScreen() {
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {
                                     isSyncing = true
-                                    Toast
-                                        .makeText(context, "Syncing Sumeria library...", Toast.LENGTH_SHORT)
-                                        .show()
+                                    Toast.makeText(context, "Syncing Sumeria library...", Toast.LENGTH_SHORT).show()
                                     lastSyncTime = "Just now"
                                     isSyncing = false
                                 }
@@ -443,11 +704,9 @@ fun SettingsScreen() {
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = Line)
                     Spacer(Modifier.height(14.dp))
 
-                    // Auto-sync Toggle Row
+                    // Auto Sync Toggle
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -472,7 +731,16 @@ fun SettingsScreen() {
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(32.dp))
+            }
+
+            // 7. Reminders & App Display
+            item {
+                SettingsSectionHeader(
+                    eyebrow = "REMINDERS & DISPLAY",
+                    title = "Notifications & Theme"
+                )
+                Spacer(Modifier.height(14.dp))
 
                 // Notifications Card
                 SettingCard {
@@ -606,7 +874,7 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(32.dp))
             }
 
-            // 5. About & Support
+            // 8. About & Support
             item {
                 SettingsSectionHeader(
                     eyebrow = "ABOUT & SUPPORT",
@@ -676,7 +944,7 @@ fun SettingsScreen() {
                 SettingCard {
                     // Help Center
                     SettingRow(
-                        icon = Icons.Rounded.HelpOutline,
+                        icon = Icons.Rounded.Help,
                         iconBg = Mint,
                         title = "Help Center & Reader Guide",
                         subtitle = "FAQs, shortcuts, and reader tips",
@@ -716,7 +984,7 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(36.dp))
             }
 
-            // 6. Logout Button
+            // 9. Logout Button
             item {
                 Surface(
                     modifier = Modifier
@@ -769,51 +1037,94 @@ fun SettingsScreen() {
     // Dialogs & Modals
     // ---------------------------------------------------------------------------
 
-    // Edit Profile Dialog
-    if (showEditProfileDialog) {
+    // 1. Edit Name Dialog
+    if (showEditNameDialog) {
         var tempName by remember { mutableStateOf(userName) }
-        var tempEmail by remember { mutableStateOf(userEmail) }
 
         AlertDialog(
-            onDismissRequest = { showEditProfileDialog = false },
+            onDismissRequest = { showEditNameDialog = false },
             containerColor = Paper,
             titleContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
             title = {
                 Text(
-                    text = "Edit Profile",
+                    text = "Edit Display Name",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                OutlinedTextField(
+                    value = tempName,
+                    onValueChange = { tempName = it },
+                    label = { Text("Display Name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Ink,
+                        unfocusedBorderColor = Line,
+                        focusedLabelColor = Ink
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (tempName.isNotBlank()) userName = tempName
+                        showEditNameDialog = false
+                        Toast.makeText(context, "Display name updated", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNameDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Sage)) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // 2. Change Email Dialog
+    if (showChangeEmailDialog) {
+        var tempEmail by remember { mutableStateOf(userEmail) }
+        var confirmEmail by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showChangeEmailDialog = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "Change Email Address",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                 )
             },
             text = {
                 Column {
-                    OutlinedTextField(
-                        value = tempName,
-                        onValueChange = { tempName = it },
-                        label = { Text("Display Name") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Ink,
-                            unfocusedBorderColor = Line,
-                            focusedLabelColor = Ink
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
+                    Text("Enter your new email address below. You may need to verify this email.", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    Spacer(Modifier.height(14.dp))
                     OutlinedTextField(
                         value = tempEmail,
                         onValueChange = { tempEmail = it },
-                        label = { Text("Email Address") },
+                        label = { Text("New Email") },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Ink,
-                            unfocusedBorderColor = Line,
-                            focusedLabelColor = Ink
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = confirmEmail,
+                        onValueChange = { confirmEmail = it },
+                        label = { Text("Confirm New Email") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -821,29 +1132,484 @@ fun SettingsScreen() {
             confirmButton = {
                 Button(
                     onClick = {
-                        userName = tempName
-                        userEmail = tempEmail
-                        showEditProfileDialog = false
-                        Toast.makeText(context, "Profile updated", Toast.LENGTH_SHORT).show()
+                        if (tempEmail.isNotBlank()) userEmail = tempEmail
+                        showChangeEmailDialog = false
+                        Toast.makeText(context, "Email update requested", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Save Changes")
+                    Text("Update Email")
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { showEditProfileDialog = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Sage)
-                ) {
+                TextButton(onClick = { showChangeEmailDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Sage)) {
                     Text("Cancel")
                 }
             }
         )
     }
 
-    // Clear Cache Dialog
+    // 3. Change Password Dialog
+    if (showChangePasswordDialog) {
+        var currentPass by remember { mutableStateOf("") }
+        var newPass by remember { mutableStateOf("") }
+        var confirmPass by remember { mutableStateOf("") }
+        var passVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showChangePasswordDialog = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "Change Password",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = currentPass,
+                        onValueChange = { currentPass = it },
+                        label = { Text("Current Password") },
+                        singleLine = true,
+                        visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = newPass,
+                        onValueChange = { newPass = it },
+                        label = { Text("New Password") },
+                        singleLine = true,
+                        visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = confirmPass,
+                        onValueChange = { confirmPass = it },
+                        label = { Text("Confirm New Password") },
+                        singleLine = true,
+                        visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showChangePasswordDialog = false
+                        Toast.makeText(context, "Password updated successfully", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Update Password")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showChangePasswordDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Sage)) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // 4. Yearly Reading Challenge Dialog
+    if (showYearlyGoalDialog) {
+        var tempGoal by remember { mutableIntStateOf(yearlyBookGoal) }
+        val sampleBooks = listOf("Atomic Habits", "Sapiens", "48 Laws of Power", "The Subtle Art", "Refactoring UI", "Deep Work")
+        var selectedBooks by remember { mutableStateOf(setOf("Atomic Habits", "Sapiens", "Deep Work")) }
+
+        AlertDialog(
+            onDismissRequest = { showYearlyGoalDialog = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "2026 Yearly Reading Challenge",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column {
+                    Text("Set target number of books for 2026:", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    Spacer(Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Target Books:", fontWeight = FontWeight.Bold, color = Ink)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            IconButton(onClick = { if (tempGoal > 1) tempGoal-- }, modifier = Modifier.size(32.dp).background(Mint, CircleShape)) {
+                                Icon(Icons.Rounded.Remove, contentDescription = null, tint = Ink)
+                            }
+                            Text("$tempGoal", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Ink)
+                            IconButton(onClick = { tempGoal++ }, modifier = Modifier.size(32.dp).background(Mint, CircleShape)) {
+                                Icon(Icons.Rounded.Add, contentDescription = null, tint = Ink)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Text("Select challenge books from library:", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
+                    Spacer(Modifier.height(8.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        sampleBooks.forEach { book ->
+                            val isSelected = selectedBooks.contains(book)
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) Mint else Color.White,
+                                border = BorderStroke(1.dp, Line),
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
+                                    selectedBooks = if (isSelected) selectedBooks - book else selectedBooks + book
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(book, fontSize = 13.sp, color = Ink)
+                                    if (isSelected) Text("✓ Included", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Ink)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        yearlyBookGoal = tempGoal
+                        challengeBooksCount = selectedBooks.size
+                        showYearlyGoalDialog = false
+                        Toast.makeText(context, "2026 challenge updated ($yearlyBookGoal books)", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Save Challenge")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showYearlyGoalDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Sage)) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // 5. Audio Reader Voices Selection Dialog
+    if (showVoiceSelectionDialog) {
+        val voiceOptions = listOf(
+            "Sumeria Serene (Female)" to "Natural, calm, and balanced pacing",
+            "Sumeria Deep (Male)" to "Resonant, warm narrative tone",
+            "Warm Storyteller (Female)" to "Expressive storytelling cadence",
+            "Nordic Crisp (Male)" to "Clear, precise academic articulation",
+            "Classic Scholar (Neutral)" to "Distraction-free neutral cadence"
+        )
+
+        AlertDialog(
+            onDismissRequest = { showVoiceSelectionDialog = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "Audio Reader Voice",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Choose default voice profile for reader audio mode:", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    Spacer(Modifier.height(4.dp))
+
+                    voiceOptions.forEach { (voiceTitle, voiceDesc) ->
+                        val isSelected = selectedAudioVoice == voiceTitle
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) Mint else Color.White,
+                            border = BorderStroke(1.dp, if (isSelected) Ink else Line),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    selectedAudioVoice = voiceTitle
+                                    showVoiceSelectionDialog = false
+                                    Toast.makeText(context, "Voice set to $voiceTitle", Toast.LENGTH_SHORT).show()
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isSelected) Icons.Rounded.VolumeUp else Icons.Rounded.RecordVoiceOver,
+                                    contentDescription = null,
+                                    tint = if (isSelected) Ink else Sage,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(voiceTitle, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Ink)
+                                    Text(voiceDesc, fontSize = 11.sp, color = Sage)
+                                }
+                                if (isSelected) Text("Active", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Ink)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showVoiceSelectionDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Ink)) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // 6. Connected Services Dialog
+    if (showConnectedServicesDialog) {
+        AlertDialog(
+            onDismissRequest = { showConnectedServicesDialog = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "Connected Storage Accounts",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Connect third-party storage to sync EPUBs & PDFs:", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    Spacer(Modifier.height(4.dp))
+
+                    // Dropbox
+                    ServiceRow(
+                        name = "Dropbox Cloud",
+                        isConnected = dropboxConnected,
+                        onToggle = { dropboxConnected = !dropboxConnected }
+                    )
+
+                    // Google Drive
+                    ServiceRow(
+                        name = "Google Drive",
+                        isConnected = gdriveConnected,
+                        onToggle = { gdriveConnected = !gdriveConnected }
+                    )
+
+                    // OneDrive
+                    ServiceRow(
+                        name = "Microsoft OneDrive",
+                        isConnected = onedriveConnected,
+                        onToggle = { onedriveConnected = !onedriveConnected }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showConnectedServicesDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Done")
+                }
+            }
+        )
+    }
+
+    // 7. Flexible Custom Time Picker Dialog
+    if (showTimePickerDialog) {
+        var selectedPresetTime by remember { mutableStateOf(reminderTime) }
+        var customHour by remember { mutableStateOf("08") }
+        var customMinute by remember { mutableStateOf("00") }
+        var customAmPm by remember { mutableStateOf("PM") }
+
+        AlertDialog(
+            onDismissRequest = { showTimePickerDialog = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "Reading Reminder Time",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column {
+                    Text("Select a preset slot or enter your preferred custom time:", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    Spacer(Modifier.height(14.dp))
+
+                    Text("Quick Presets:", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
+                    Spacer(Modifier.height(6.dp))
+
+                    // Preset chips
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("7:00 AM", "12:30 PM", "8:00 PM", "9:30 PM").forEach { preset ->
+                            ChoiceChip(
+                                text = preset,
+                                selected = selectedPresetTime == preset,
+                                onClick = { selectedPresetTime = preset }
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+                    HorizontalDivider(color = Line)
+                    Spacer(Modifier.height(16.dp))
+
+                    Text("Custom Time Input:", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        OutlinedTextField(
+                            value = customHour,
+                            onValueChange = { if (it.length <= 2) customHour = it },
+                            label = { Text("Hour") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.width(72.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line)
+                        )
+
+                        Text(" : ", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Ink, modifier = Modifier.padding(horizontal = 4.dp))
+
+                        OutlinedTextField(
+                            value = customMinute,
+                            onValueChange = { if (it.length <= 2) customMinute = it },
+                            label = { Text("Min") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.width(72.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line)
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            ChoiceChip("AM", customAmPm == "AM") { customAmPm = "AM" }
+                            ChoiceChip("PM", customAmPm == "PM") { customAmPm = "PM" }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val formattedCustom = "${customHour.padStart(2, '0')}:${customMinute.padStart(2, '0')} $customAmPm"
+                        reminderTime = if (selectedPresetTime.isNotEmpty()) selectedPresetTime else formattedCustom
+                        showTimePickerDialog = false
+                        Toast.makeText(context, "Reminder set for $reminderTime", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Set Time")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePickerDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Sage)) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // 8. Milestone Badges Showcase Modal
+    if (showBadgesModal) {
+        val badges = listOf(
+            Triple("🔥", "Streak Master", "Maintained a 30+ day consecutive reading streak"),
+            Triple("💯", "Centurion", "Read over 100 hours in Sumeria"),
+            Triple("🦉", "Night Owl", "Completed 15 late night reading sessions"),
+            Triple("🧭", "Genre Explorer", "Read books across 5 different categories"),
+            Triple("📚", "Library Builder", "Gathered over 50 books in personal shelves"),
+            Triple("⚡", "Speed Reader", "Finished 3 books in a single week"),
+            Triple("🎧", "Audio Scholar", "Listened to 20 hours of audio narration"),
+            Triple("✦", "Scholar Legend", "Unlocked Tier 4 Scholar status")
+        )
+
+        AlertDialog(
+            onDismissRequest = { showBadgesModal = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "Sumeria Milestone Badges",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 380.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Unlocked reading achievements and milestone badges:", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    Spacer(Modifier.height(4.dp))
+
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(badges) { (emoji, badgeTitle, badgeDesc) ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Cream,
+                                border = BorderStroke(1.dp, Amber.copy(alpha = 0.25f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(emoji, fontSize = 24.sp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(badgeTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ink)
+                                        Text(badgeDesc, fontSize = 11.sp, color = Sage)
+                                    }
+                                    Text("✓ Unlocked", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Ink)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showBadgesModal = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // 9. Clear Cache Dialog
     if (showClearCacheDialog) {
         AlertDialog(
             onDismissRequest = { showClearCacheDialog = false },
@@ -858,7 +1624,7 @@ fun SettingsScreen() {
             },
             text = {
                 Text(
-                    text = "This will remove temporary book covers and cached audio streams ($cacheSize). Your books and reading stats will remain safe.",
+                    text = "This will remove temporary book covers and cached audio streams ($cacheSize). Your books and stats will remain safe.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Ink
                 )
@@ -877,124 +1643,14 @@ fun SettingsScreen() {
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { showClearCacheDialog = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Sage)
-                ) {
+                TextButton(onClick = { showClearCacheDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Sage)) {
                     Text("Cancel")
                 }
             }
         )
     }
 
-    // Manage Dictionaries Dialog
-    if (showDictionaryDialog) {
-        AlertDialog(
-            onDismissRequest = { showDictionaryDialog = false },
-            containerColor = Paper,
-            titleContentColor = Ink,
-            shape = RoundedCornerShape(24.dp),
-            title = {
-                Text(
-                    text = "Offline Dictionaries",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                )
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "Downloaded language packs for instant lookup during reading:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Sage
-                    )
-                    Spacer(Modifier.height(16.dp))
-
-                    listOf(
-                        "English (US) Dict" to "142 MB (Active)",
-                        "Spanish (ES) Dict" to "98 MB (Active)",
-                        "French (FR) Dict" to "110 MB (Download)"
-                    ).forEach { (dictName, dictStatus) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(dictName, fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 14.sp)
-                                Text(dictStatus, color = Sage, fontSize = 12.sp)
-                            }
-                            Surface(
-                                shape = CircleShape,
-                                color = Mint,
-                                modifier = Modifier.clip(CircleShape).clickable {
-                                    Toast.makeText(context, "Updated dictionary preferences", Toast.LENGTH_SHORT).show()
-                                }
-                            ) {
-                                Text("Select", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showDictionaryDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Done")
-                }
-            }
-        )
-    }
-
-    // Schedule Time Picker Dialog
-    if (showTimePickerDialog) {
-        AlertDialog(
-            onDismissRequest = { showTimePickerDialog = false },
-            containerColor = Paper,
-            titleContentColor = Ink,
-            shape = RoundedCornerShape(24.dp),
-            title = {
-                Text(
-                    text = "Set Reminder Time",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                )
-            },
-            text = {
-                Column {
-                    Text("Choose when you would like to receive your daily reading reminder:", color = Sage, fontSize = 14.sp)
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("7:00 AM", "12:30 PM", "8:00 PM", "9:30 PM").forEach { timeOption ->
-                            ChoiceChip(
-                                text = timeOption,
-                                selected = reminderTime == timeOption,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    reminderTime = timeOption
-                                    showTimePickerDialog = false
-                                    Toast.makeText(context, "Reminder set for $timeOption", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showTimePickerDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Ink)) {
-                    Text("Close")
-                }
-            }
-        )
-    }
-
-    // Logout Confirmation Dialog
+    // 10. Logout Confirmation Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -1027,10 +1683,7 @@ fun SettingsScreen() {
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { showLogoutDialog = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Sage)
-                ) {
+                TextButton(onClick = { showLogoutDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Sage)) {
                     Text("Cancel")
                 }
             }
@@ -1101,19 +1754,39 @@ private fun SettingsHeader() {
             color = Sage
         )
         Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineLarge.copy(
-                fontWeight = FontWeight.Bold
-            ),
-            color = Ink
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Customize reading habits, sync, and display defaults.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Sage
-        )
+
+        // Headline + R.drawable.ic_settings illustration
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Settings",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Ink
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Customize reading habits, sync, and display defaults.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Sage
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Image(
+                painter = painterResource(id = R.drawable.ic_settings),
+                contentDescription = "Settings illustration",
+                modifier = Modifier
+                    .width(96.dp)
+                    .height(72.dp)
+                    .clip(RoundedCornerShape(12.dp))
+            )
+        }
     }
 }
 
@@ -1121,7 +1794,8 @@ private fun SettingsHeader() {
 private fun ProfileHeroCard(
     name: String,
     email: String,
-    onEditProfileClick: () -> Unit
+    onEditNameClick: () -> Unit,
+    onViewBadgesClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -1201,7 +1875,8 @@ private fun ProfileHeroCard(
                 Surface(
                     shape = CircleShape,
                     color = Mint.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, Mint.copy(alpha = 0.25f))
+                    border = BorderStroke(1.dp, Mint.copy(alpha = 0.25f)),
+                    modifier = Modifier.clip(CircleShape).clickable(onClick = onViewBadgesClick)
                 ) {
                     Text(
                         text = "✦ Scholar Tier • Member since 2026",
@@ -1221,11 +1896,11 @@ private fun ProfileHeroCard(
                 color = Paper,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .clickable(onClick = onEditProfileClick)
+                    .clickable(onClick = onEditNameClick)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Edit,
-                    contentDescription = "Edit Profile",
+                    contentDescription = "Edit Display Name",
                     tint = Ink,
                     modifier = Modifier
                         .padding(10.dp)
@@ -1288,6 +1963,7 @@ private fun SettingRow(
     iconBg: Color,
     title: String,
     subtitle: String,
+    actionText: String? = null,
     showChevron: Boolean = true,
     onClick: () -> Unit
 ) {
@@ -1331,12 +2007,81 @@ private fun SettingRow(
             )
         }
 
-        if (showChevron) {
+        Spacer(Modifier.width(8.dp))
+
+        if (actionText != null) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Mint,
+                border = BorderStroke(1.dp, Line)
+            ) {
+                Text(
+                    text = actionText,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Ink,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        } else if (showChevron) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
                 tint = Sage,
                 modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ServiceRow(
+    name: String,
+    isConnected: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = CircleShape,
+                color = if (isConnected) Mint else Cream,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isConnected) Icons.Rounded.CloudDone else Icons.Rounded.CloudOff,
+                        contentDescription = null,
+                        tint = Ink,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ink)
+                Text(if (isConnected) "Connected & Syncing" else "Not Connected", fontSize = 11.sp, color = Sage)
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (isConnected) ErrorRed.copy(alpha = 0.1f) else Mint,
+            border = BorderStroke(1.dp, Line),
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onToggle)
+        ) {
+            Text(
+                text = if (isConnected) "Disconnect" else "Connect",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isConnected) ErrorRed else Ink,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
             )
         }
     }
