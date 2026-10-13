@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle.State as LifecycleState
 import com.michaelamimo.sumeria.domain.model.ReaderBookmark as SavedReaderBookmark
 import org.json.JSONObject
 
@@ -85,10 +86,23 @@ fun ReaderScreen(
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) viewModel.saveProgressNow()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.onReaderForeground()
+                Lifecycle.Event.ON_PAUSE -> viewModel.onReaderBackground()
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onReaderBackground()
+        }
+    }
+
+    LaunchedEffect(currentBook?.id, currentDoc) {
+        if (currentBook != null && currentDoc != null && lifecycleOwner.lifecycle.currentState.isAtLeast(LifecycleState.RESUMED)) {
+            viewModel.onReaderForeground()
+        }
     }
 
     Box(

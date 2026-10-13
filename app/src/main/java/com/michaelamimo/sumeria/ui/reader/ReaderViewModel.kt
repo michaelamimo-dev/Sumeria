@@ -3,19 +3,23 @@ package com.michaelamimo.sumeria.ui.reader
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.os.SystemClock
 import com.michaelamimo.sumeria.domain.model.BookFormat
 import com.michaelamimo.sumeria.domain.model.LibraryBook
 import com.michaelamimo.sumeria.domain.model.ReaderBookmark as SavedReaderBookmark
 import com.michaelamimo.sumeria.domain.model.ReaderDocument
 import com.michaelamimo.sumeria.domain.model.ReadingProgress
+import com.michaelamimo.sumeria.domain.model.ReadingSession
 import com.michaelamimo.sumeria.domain.model.UserPreferences
 import com.michaelamimo.sumeria.domain.repository.LibraryBookRepository
 import com.michaelamimo.sumeria.domain.repository.ReaderBookmarkRepository
 import com.michaelamimo.sumeria.domain.repository.ReaderContentRepository
 import com.michaelamimo.sumeria.domain.repository.ReadingProgressRepository
+import com.michaelamimo.sumeria.domain.repository.ReadingSessionRepository
 import com.michaelamimo.sumeria.domain.repository.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
@@ -47,6 +52,7 @@ class ReaderViewModel @Inject constructor(
     private val bookRepository: LibraryBookRepository,
     private val contentRepository: ReaderContentRepository,
     private val progressRepository: ReadingProgressRepository,
+    private val sessionRepository: ReadingSessionRepository,
     private val bookmarkRepository: ReaderBookmarkRepository,
     private val preferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
@@ -55,6 +61,18 @@ class ReaderViewModel @Inject constructor(
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
     private var userPreferences = UserPreferences()
     private var progressSaveJob: Job? = null
+    private var sessionTimerJob: Job? = null
+    private var activeSession: ActiveSession? = null
+    private var wordCountPrefix: IntArray = intArrayOf(0)
+
+    private data class ActiveSession(
+        val id: String,
+        val bookId: String,
+        val startedAtMillis: Long,
+        val startedAtElapsedMillis: Long,
+        val startBlockIndex: Int,
+        val startSectionIndex: Int
+    )
 
     init {
         viewModelScope.launch {
@@ -146,6 +164,91 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    /** Starts a foreground reading interval. Repeated lifecycle notifications are safe. */
+    fun onReaderForeground() {
+        if (activeSession != null) return
+        val state = _uiState.value
+        val book = state.book ?: return
+        if (state.document == null || state.isLoading || state.error != null) return
+        val now = System.currentTimeMillis()
+        val session = ActiveSession(
+            id = UUID.randomUUID().toString(),
+            bookId = book.id,
+            startedAtMillis = now,
+            startedAtElapsedMillis = SystemClock.elapsedRealtime(),
+            startBlockIndex = state.currentBlockIndex,
+            startSectionIndex = state.currentSectionIndex
+        )
+        activeSession = session
+        sessionTimerJob?.cancel()
+        sessionTimerJob = viewModelScope.launch {
+            persistActiveSession(session, ended = false)
+            while (true) {
+                delay(SESSION_CHECKPOINT_INTERVAL_MS)
+                persistActiveSession(session, ended = false)
+            }
+        }
+    }
+
+    /** Closes the foreground interval and checkpoints its final duration and progress. */
+    fun onReaderBackground() {
+        val session = activeSession ?: return
+        activeSession = null
+        sessionTimerJob?.cancel()
+        sessionTimerJob = null
+        viewModelScope.launch {
+            persistActiveSession(session, ended = true)
+            saveProgress()
+        }
+    }
+
+    private suspend fun persistActiveSession(session: ActiveSession, ended: Boolean) {
+        val state = _uiState.value
+        if (state.book?.id != session.bookId) return
+        val elapsed = (SystemClock.elapsedRealtime() - session.startedAtElapsedMillis).coerceAtLeast(0L)
+        // Ignore accidental opens shorter than five seconds; normal periodic checkpoints remain visible.
+        if (ended && elapsed < MIN_RECORDED_SESSION_MS) {
+            sessionRepository.delete(session.id)
+            return
+        }
+        val currentPosition = if (state.book.format == BookFormat.PDF) {
+            state.currentSectionIndex
+        } else {
+            state.currentBlockIndex
+        }
+        val initialPosition = if (state.book.format == BookFormat.PDF) {
+            session.startSectionIndex
+        } else {
+            session.startBlockIndex
+        }
+        val unitsRead = (currentPosition - initialPosition).coerceAtLeast(0)
+        val wordsRead = wordsBetween(session.startBlockIndex, state.currentBlockIndex)
+        val pagesRead = if (state.book.format == BookFormat.PDF) {
+            unitsRead.coerceAtLeast(if (elapsed >= MILLIS_PER_MINUTE) 1 else 0)
+        } else if (wordsRead == 0) {
+            0
+        } else {
+            (wordsRead + WORDS_PER_ESTIMATED_PAGE - 1) / WORDS_PER_ESTIMATED_PAGE
+        }
+        sessionRepository.save(
+            ReadingSession(
+                id = session.id,
+                bookId = session.bookId,
+                startedAtMillis = session.startedAtMillis,
+                endedAtMillis = if (ended) System.currentTimeMillis() else null,
+                durationMillis = elapsed,
+                pagesRead = pagesRead,
+                wordsRead = wordsRead
+            )
+        )
+    }
+
+    private fun wordsBetween(startBlock: Int, endBlock: Int): Int {
+        val lower = startBlock.coerceIn(0, wordCountPrefix.lastIndex)
+        val upper = endBlock.coerceIn(lower, wordCountPrefix.lastIndex)
+        return wordCountPrefix[upper] - wordCountPrefix[lower]
+    }
+
     private fun observeBookmarks(bookId: String) {
         viewModelScope.launch {
             bookmarkRepository.observeForBook(bookId).collectLatest { bookmarks ->
@@ -174,6 +277,20 @@ class ReaderViewModel @Inject constructor(
                     )
                 }
                 val document = contentRepository.load(book)
+                val wordPrefix = withContext(Dispatchers.Default) {
+                    buildList {
+                        add(0)
+                        var total = 0
+                        document.sections.forEach { section ->
+                            add(total)
+                            section.paragraphs.forEach { paragraph ->
+                                total += paragraph.trim().split(Regex("\\s+")).count { it.isNotBlank() }
+                                add(total)
+                            }
+                        }
+                    }.toIntArray()
+                }
+                wordCountPrefix = wordPrefix
                 _uiState.update {
                     it.copy(
                         document = document,
@@ -255,5 +372,9 @@ class ReaderViewModel @Inject constructor(
 
     private companion object {
         const val PROGRESS_SAVE_DELAY_MS = 900L
+        const val SESSION_CHECKPOINT_INTERVAL_MS = 15_000L
+        const val MIN_RECORDED_SESSION_MS = 5_000L
+        const val WORDS_PER_ESTIMATED_PAGE = 250
+        const val MILLIS_PER_MINUTE = 60_000L
     }
 }

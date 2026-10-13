@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ReadingProgressDao {
+    @Query("SELECT * FROM reading_progress ORDER BY updatedAtMillis DESC") fun observeAll(): Flow<List<ReadingProgressEntity>>
     @Query("SELECT * FROM reading_progress WHERE bookId = :bookId LIMIT 1") fun observe(bookId: String): Flow<ReadingProgressEntity?>
     @Query("SELECT * FROM reading_progress WHERE bookId = :bookId LIMIT 1") suspend fun get(bookId: String): ReadingProgressEntity?
     @Upsert suspend fun upsert(progress: ReadingProgressEntity)
