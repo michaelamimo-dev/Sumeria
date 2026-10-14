@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -94,6 +96,8 @@ fun SettingsScreen(
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val syncViewModel: CloudSyncViewModel = hiltViewModel()
     val syncState by syncViewModel.state.collectAsStateWithLifecycle()
+    val integrationsViewModel: IntegrationsViewModel = hiltViewModel()
+    val integrationsState by integrationsViewModel.state.collectAsStateWithLifecycle()
     var userName by remember(authUser) {
         mutableStateOf(authUser?.displayName ?: authUser?.email?.substringBefore("@") ?: "Sumeria Reader")
     }
@@ -108,10 +112,31 @@ fun SettingsScreen(
     var offlineDictionaries by remember { mutableStateOf("English (US) & Spanish (240 MB)") }
     var selectedAudioVoice by remember { mutableStateOf("Sumeria Serene (Female)") }
 
-    // Connected Services & Cloud
-    var dropboxConnected by remember { mutableStateOf(true) }
-    var gdriveConnected by remember { mutableStateOf(false) }
-    var onedriveConnected by remember { mutableStateOf(false) }
+    val csvDocumentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        val csv = integrationsState.preparedCsv
+        if (uri == null) {
+            integrationsViewModel.exportCancelled()
+        } else if (csv != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(csv.toByteArray(Charsets.UTF_8))
+                } ?: error("The selected location could not be opened.")
+            }.onSuccess { integrationsViewModel.exportSaved() }
+                .onFailure { integrationsViewModel.exportFailed(it.localizedMessage ?: "Could not save the export.") }
+        }
+    }
+
+    LaunchedEffect(integrationsState.preparedCsv) {
+        if (integrationsState.preparedCsv != null) csvDocumentPicker.launch("sumeria_goodreads_export.csv")
+    }
+    LaunchedEffect(integrationsState.status) {
+        integrationsState.status?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            integrationsViewModel.dismissStatus()
+        }
+    }
 
     // Reminders & App Display
     var dailyReminders by remember { mutableStateOf(true) }
@@ -686,7 +711,7 @@ fun SettingsScreen(
                         icon = Icons.Rounded.CloudQueue,
                         iconBg = Sky,
                         title = "Third-Party Storage Accounts",
-                        subtitle = "Dropbox (${if (dropboxConnected) "Connected" else "Off"}), Drive, OneDrive",
+                        subtitle = "Export your library or save through a cloud storage provider",
                         actionText = "Manage",
                         onClick = { showConnectedServicesDialog = true }
                     )
@@ -1437,29 +1462,25 @@ fun SettingsScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Connect third-party storage to sync EPUBs & PDFs:", style = MaterialTheme.typography.bodySmall, color = Sage)
-                    Spacer(Modifier.height(4.dp))
-
-                    // Dropbox
-                    ServiceRow(
-                        name = "Dropbox Cloud",
-                        isConnected = dropboxConnected,
-                        onToggle = { dropboxConnected = !dropboxConnected }
+                    Text(
+                        "Export your library as a Goodreads-compatible CSV. Choose a destination in Android's save dialog; installed cloud storage apps can appear there.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Sage
                     )
-
-                    // Google Drive
-                    ServiceRow(
-                        name = "Google Drive",
-                        isConnected = gdriveConnected,
-                        onToggle = { gdriveConnected = !gdriveConnected }
-                    )
-
-                    // OneDrive
-                    ServiceRow(
-                        name = "Microsoft OneDrive",
-                        isConnected = onedriveConnected,
-                        onToggle = { onedriveConnected = !onedriveConnected }
-                    )
+                    OutlinedButton(
+                        onClick = { integrationsViewModel.prepareGoodreadsExport() },
+                        enabled = !integrationsState.isPreparingExport,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
+                        border = BorderStroke(1.dp, Line),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (integrationsState.isPreparingExport) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(if (integrationsState.isPreparingExport) "Preparing export…" else "Export Goodreads CSV")
+                    }
                 }
             },
             confirmButton = {
@@ -2069,60 +2090,6 @@ private fun SettingRow(
                 contentDescription = null,
                 tint = Sage,
                 modifier = Modifier.size(22.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ServiceRow(
-    name: String,
-    isConnected: Boolean,
-    onToggle: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = CircleShape,
-                color = if (isConnected) Mint else Cream,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (isConnected) Icons.Rounded.CloudDone else Icons.Rounded.CloudOff,
-                        contentDescription = null,
-                        tint = Ink,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ink)
-                Text(if (isConnected) "Connected & Syncing" else "Not Connected", fontSize = 11.sp, color = Sage)
-            }
-        }
-
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = if (isConnected) ErrorRed.copy(alpha = 0.1f) else Mint,
-            border = BorderStroke(1.dp, Line),
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .clickable(onClick = onToggle)
-        ) {
-            Text(
-                text = if (isConnected) "Disconnect" else "Connect",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isConnected) ErrorRed else Ink,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
             )
         }
     }
