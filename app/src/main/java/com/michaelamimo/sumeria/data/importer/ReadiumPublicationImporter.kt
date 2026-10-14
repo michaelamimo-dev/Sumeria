@@ -22,8 +22,7 @@ import org.readium.r2.streamer.parser.DefaultPublicationParser
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.nio.charset.StandardCharsets
-import java.util.UUID
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -64,7 +63,7 @@ class ReadiumPublicationImporter @Inject constructor(
                 val fallbackTitle = queryDisplayName(uri)?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
                     ?: "Untitled publication"
                 val title = metadata.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
-                val id = UUID.nameUUIDFromBytes(sourceUri.toByteArray(StandardCharsets.UTF_8)).toString()
+                val id = contentId(uri)
                 val coverUri = publication.coverFitting(android.util.Size(640, 960))
                     ?.let { saveCover(it, id) }
 
@@ -96,6 +95,19 @@ class ReadiumPublicationImporter @Inject constructor(
         null
     )?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null
+    }
+
+    private fun contentId(uri: Uri): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        } ?: throw IOException("The selected publication could not be read.")
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     }
 
     private fun saveCover(bitmap: Bitmap, bookId: String): String {

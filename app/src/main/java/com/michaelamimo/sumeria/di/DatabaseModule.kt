@@ -3,6 +3,9 @@ package com.michaelamimo.sumeria.di
 import android.content.Context
 import androidx.room.Room
 import com.michaelamimo.sumeria.data.local.SumeriaDatabase
+import com.michaelamimo.sumeria.data.local.MIGRATION_1_2
+import com.michaelamimo.sumeria.data.local.MIGRATION_2_3
+import com.michaelamimo.sumeria.data.local.MIGRATION_3_4
 import com.michaelamimo.sumeria.data.local.dao.BookDao
 import com.michaelamimo.sumeria.data.local.dao.ReaderBookmarkDao
 import com.michaelamimo.sumeria.data.local.dao.ReadingProgressDao
@@ -21,7 +24,9 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): SumeriaDatabase =
-        Room.databaseBuilder(context, SumeriaDatabase::class.java, "sumeria.db").build()
+        Room.databaseBuilder(context, SumeriaDatabase::class.java, "sumeria.db")
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .build()
 
     @Provides fun provideBookDao(database: SumeriaDatabase): BookDao = database.bookDao()
     @Provides fun provideReadingProgressDao(database: SumeriaDatabase): ReadingProgressDao = database.readingProgressDao()

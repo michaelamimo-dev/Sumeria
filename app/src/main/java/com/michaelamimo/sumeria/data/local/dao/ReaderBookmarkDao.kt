@@ -8,10 +8,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ReaderBookmarkDao {
-    @Query("SELECT * FROM reader_bookmarks WHERE bookId = :bookId ORDER BY createdAtMillis DESC")
-    fun observeForBook(bookId: String): Flow<List<ReaderBookmarkEntity>>
+    @Query("SELECT * FROM reader_bookmarks WHERE ownerUserId = :ownerUserId AND bookId = :bookId ORDER BY createdAtMillis DESC")
+    fun observeForBook(ownerUserId: String, bookId: String): Flow<List<ReaderBookmarkEntity>>
+    @Query("SELECT * FROM reader_bookmarks WHERE ownerUserId = :ownerUserId")
+    fun observeAll(ownerUserId: String): Flow<List<ReaderBookmarkEntity>>
+    @Query("SELECT * FROM reader_bookmarks WHERE ownerUserId = :ownerUserId")
+    suspend fun getAll(ownerUserId: String): List<ReaderBookmarkEntity>
     @Upsert
     suspend fun upsert(bookmark: ReaderBookmarkEntity)
-    @Query("DELETE FROM reader_bookmarks WHERE id = :bookmarkId")
-    suspend fun delete(bookmarkId: String)
+    @Query("DELETE FROM reader_bookmarks WHERE ownerUserId = :ownerUserId AND id = :bookmarkId")
+    suspend fun delete(ownerUserId: String, bookmarkId: String)
 }

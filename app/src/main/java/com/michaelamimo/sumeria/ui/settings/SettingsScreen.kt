@@ -42,7 +42,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.michaelamimo.sumeria.R
+import com.michaelamimo.sumeria.auth.AuthState
+import com.michaelamimo.sumeria.auth.AuthViewModel
 import com.michaelamimo.sumeria.ui.theme.SumeriaTurtleLogo
 
 // ---------------------------------------------------------------------------
@@ -69,7 +73,10 @@ private const val SIDE = 24 // Horizontal margin across all main screens
 // ---------------------------------------------------------------------------
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onSignOut: () -> Unit,
+    viewModel: AuthViewModel = hiltViewModel()
+) {
     val context = LocalContext.current
     val view = LocalView.current
     val activity = remember(view) { view.context.findActivity() }
@@ -83,8 +90,14 @@ fun SettingsScreen() {
     }
 
     // --- Interactive User & Preference States ---
-    var userName by remember { mutableStateOf("Amimo Michael") }
-    var userEmail by remember { mutableStateOf("michael@sumeria.app") }
+    val authUser by viewModel.user.collectAsStateWithLifecycle()
+    val authState by viewModel.authState.collectAsStateWithLifecycle()
+    val syncViewModel: CloudSyncViewModel = hiltViewModel()
+    val syncState by syncViewModel.state.collectAsStateWithLifecycle()
+    var userName by remember(authUser) {
+        mutableStateOf(authUser?.displayName ?: authUser?.email?.substringBefore("@") ?: "Sumeria Reader")
+    }
+    val userEmail = authUser?.email ?: "Not signed in"
 
     // Reading Goals & Preferences
     var dailyGoalMinutes by remember { mutableIntStateOf(15) } // Scalable goal starting low (10, 15, 20, 25)
@@ -99,9 +112,6 @@ fun SettingsScreen() {
     var dropboxConnected by remember { mutableStateOf(true) }
     var gdriveConnected by remember { mutableStateOf(false) }
     var onedriveConnected by remember { mutableStateOf(false) }
-    var autoCloudSync by remember { mutableStateOf(true) }
-    var lastSyncTime by remember { mutableStateOf("Just now") }
-    var isSyncing by remember { mutableStateOf(false) }
 
     // Reminders & App Display
     var dailyReminders by remember { mutableStateOf(true) }
@@ -123,6 +133,25 @@ fun SettingsScreen() {
     var showBadgesModal by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(authState) {
+        when (val current = authState) {
+            is AuthState.AccountActionCompleted -> {
+                Toast.makeText(context, current.message, Toast.LENGTH_SHORT).show()
+                showEditNameDialog = false
+                showChangeEmailDialog = false
+                showChangePasswordDialog = false
+                viewModel.resetState()
+            }
+            is AuthState.Error -> {
+                if (showEditNameDialog || showChangeEmailDialog || showChangePasswordDialog) {
+                    Toast.makeText(context, current.message, Toast.LENGTH_LONG).show()
+                    viewModel.resetState()
+                }
+            }
+            else -> Unit
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -676,7 +705,7 @@ fun SettingsScreen() {
                                 color = Ink
                             )
                             Text(
-                                text = if (isSyncing) "Syncing with cloud..." else "Last synced $lastSyncTime",
+                                text = syncState.status,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Sage
                             )
@@ -688,15 +717,10 @@ fun SettingsScreen() {
                             border = BorderStroke(1.dp, Amber.copy(alpha = 0.3f)),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    isSyncing = true
-                                    Toast.makeText(context, "Syncing Sumeria library...", Toast.LENGTH_SHORT).show()
-                                    lastSyncTime = "Just now"
-                                    isSyncing = false
-                                }
+                                .clickable(enabled = !syncState.isSyncing) { syncViewModel.syncNow() }
                         ) {
                             Text(
-                                text = "Sync Now",
+                                text = if (syncState.isSyncing) "Syncing…" else "Sync Now",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = Ink,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
@@ -719,8 +743,8 @@ fun SettingsScreen() {
                         )
 
                         Switch(
-                            checked = autoCloudSync,
-                            onCheckedChange = { autoCloudSync = it },
+                            checked = syncState.autoSyncEnabled,
+                            onCheckedChange = syncViewModel::setAutoSync,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Paper,
                                 checkedTrackColor = Ink,
@@ -1070,9 +1094,7 @@ fun SettingsScreen() {
             confirmButton = {
                 Button(
                     onClick = {
-                        if (tempName.isNotBlank()) userName = tempName
-                        showEditNameDialog = false
-                        Toast.makeText(context, "Display name updated", Toast.LENGTH_SHORT).show()
+                        viewModel.updateDisplayName(tempName)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
                     shape = RoundedCornerShape(12.dp)
@@ -1092,6 +1114,7 @@ fun SettingsScreen() {
     if (showChangeEmailDialog) {
         var tempEmail by remember { mutableStateOf(userEmail) }
         var confirmEmail by remember { mutableStateOf("") }
+        var currentEmailPassword by remember { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = { showChangeEmailDialog = false },
@@ -1127,14 +1150,27 @@ fun SettingsScreen() {
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = currentEmailPassword,
+                        onValueChange = { currentEmailPassword = it },
+                        label = { Text("Current Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (tempEmail.isNotBlank()) userEmail = tempEmail
-                        showChangeEmailDialog = false
-                        Toast.makeText(context, "Email update requested", Toast.LENGTH_SHORT).show()
+                        if (tempEmail != confirmEmail) {
+                            Toast.makeText(context, "Email addresses do not match.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.updateEmail(tempEmail, currentEmailPassword)
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
                     shape = RoundedCornerShape(12.dp)
@@ -1207,8 +1243,11 @@ fun SettingsScreen() {
             confirmButton = {
                 Button(
                     onClick = {
-                        showChangePasswordDialog = false
-                        Toast.makeText(context, "Password updated successfully", Toast.LENGTH_SHORT).show()
+                        if (newPass != confirmPass) {
+                            Toast.makeText(context, "New passwords do not match.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.updatePassword(currentPass, newPass)
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
                     shape = RoundedCornerShape(12.dp)
@@ -1674,7 +1713,9 @@ fun SettingsScreen() {
                 Button(
                     onClick = {
                         showLogoutDialog = false
+                        viewModel.signOut()
                         Toast.makeText(context, "Logged out of Sumeria", Toast.LENGTH_LONG).show()
+                        onSignOut()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Paper),
                     shape = RoundedCornerShape(12.dp)

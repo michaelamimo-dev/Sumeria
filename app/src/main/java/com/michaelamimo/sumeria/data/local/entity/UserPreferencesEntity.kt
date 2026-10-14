@@ -1,6 +1,7 @@
 package com.michaelamimo.sumeria.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 import com.michaelamimo.sumeria.domain.model.UserPreferences
 
@@ -18,16 +19,18 @@ data class UserPreferencesEntity(
     val textAlignment: String,
     val appThemeMode: String,
     val dailyRemindersEnabled: Boolean,
-    val reminderMinutesAfterMidnight: Int?
+    val reminderMinutesAfterMidnight: Int?,
+    @ColumnInfo(defaultValue = "0") val updatedAtMillis: Long = 0L,
+    @ColumnInfo(defaultValue = "1") val autoCloudSyncEnabled: Boolean = true
 )
 
 internal fun UserPreferencesEntity.toDomain() = UserPreferences(
     profileId, dailyGoalMinutes, yearlyBookGoal, readerTheme, readerFont, readerFontSize,
     readerLineSpacing, readerHorizontalMargin, readingStyle, textAlignment, appThemeMode,
-    dailyRemindersEnabled, reminderMinutesAfterMidnight
+    dailyRemindersEnabled, reminderMinutesAfterMidnight, updatedAtMillis, autoCloudSyncEnabled
 )
 internal fun UserPreferences.toEntity() = UserPreferencesEntity(
     profileId, dailyGoalMinutes, yearlyBookGoal, readerTheme, readerFont, readerFontSize,
     readerLineSpacing, readerHorizontalMargin, readingStyle, textAlignment, appThemeMode,
-    dailyRemindersEnabled, reminderMinutesAfterMidnight
+    dailyRemindersEnabled, reminderMinutesAfterMidnight, updatedAtMillis, autoCloudSyncEnabled
 )

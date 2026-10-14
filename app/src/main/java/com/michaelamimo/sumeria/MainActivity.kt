@@ -102,7 +102,11 @@ fun SumeriaApp() {
 
         // The new Main Navigation Screen that hosts the bottom bar and the 5 tabs
         composable(Screen.Main.route) {
-            MainNavigationScreen()
+            MainNavigationScreen(onSignedOut = {
+                navController.navigate(Screen.Onboarding.route) {
+                    popUpTo(Screen.Main.route) { inclusive = true }
+                }
+            })
         }
     }
 }

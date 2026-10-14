@@ -1,13 +1,14 @@
 package com.michaelamimo.sumeria.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 import com.michaelamimo.sumeria.domain.model.BookFormat
 import com.michaelamimo.sumeria.domain.model.LibraryBook
 
-@Entity(tableName = "books")
+@Entity(tableName = "books", primaryKeys = ["ownerUserId", "id"])
 data class BookEntity(
-    @PrimaryKey val id: String,
+    @ColumnInfo(defaultValue = "'local'") val ownerUserId: String = "local",
+    val id: String,
     val title: String,
     val authorsJson: String,
     val description: String?,
@@ -25,7 +26,7 @@ internal fun BookEntity.toDomain() = LibraryBook(
     genre, totalPages, addedAtMillis, lastOpenedAtMillis
 )
 
-internal fun LibraryBook.toEntity() = BookEntity(
-    id, title, AuthorsJson.encode(authors), description, format, sourceUri, coverUri,
+internal fun LibraryBook.toEntity(ownerUserId: String = "local") = BookEntity(
+    ownerUserId, id, title, AuthorsJson.encode(authors), description, format, sourceUri, coverUri,
     genre, totalPages, addedAtMillis, lastOpenedAtMillis
 )

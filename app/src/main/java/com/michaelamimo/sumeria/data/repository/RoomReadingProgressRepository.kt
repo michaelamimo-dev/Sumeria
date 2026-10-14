@@ -1,6 +1,7 @@
 package com.michaelamimo.sumeria.data.repository
 
 import com.michaelamimo.sumeria.data.local.dao.ReadingProgressDao
+import com.michaelamimo.sumeria.data.auth.CurrentProfileProvider
 import com.michaelamimo.sumeria.data.local.entity.toDomain
 import com.michaelamimo.sumeria.data.local.entity.toEntity
 import com.michaelamimo.sumeria.domain.model.ReadingProgress
@@ -11,10 +12,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class RoomReadingProgressRepository @Inject constructor(private val dao: ReadingProgressDao) : ReadingProgressRepository {
-    override fun observeAll(): Flow<List<ReadingProgress>> = dao.observeAll().map { rows -> rows.map { it.toDomain() } }
-    override fun observe(bookId: String): Flow<ReadingProgress?> = dao.observe(bookId).map { it?.toDomain() }
-    override suspend fun get(bookId: String): ReadingProgress? = dao.get(bookId)?.toDomain()
-    override suspend fun save(progress: ReadingProgress) = dao.upsert(progress.toEntity())
-    override suspend fun delete(bookId: String) = dao.delete(bookId)
+class RoomReadingProgressRepository @Inject constructor(
+    private val dao: ReadingProgressDao,
+    private val profileProvider: CurrentProfileProvider
+) : ReadingProgressRepository {
+    override fun observeAll(): Flow<List<ReadingProgress>> = dao.observeAll(profileProvider.currentProfileId()).map { rows -> rows.map { it.toDomain() } }
+    override fun observe(bookId: String): Flow<ReadingProgress?> = dao.observe(profileProvider.currentProfileId(), bookId).map { it?.toDomain() }
+    override suspend fun get(bookId: String): ReadingProgress? = dao.get(profileProvider.currentProfileId(), bookId)?.toDomain()
+    override suspend fun save(progress: ReadingProgress) = dao.upsert(progress.toEntity(profileProvider.currentProfileId()))
+    override suspend fun delete(bookId: String) = dao.delete(profileProvider.currentProfileId(), bookId)
 }

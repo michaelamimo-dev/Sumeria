@@ -14,7 +14,9 @@ data class UserPreferences(
     val textAlignment: String = "Justified",
     val appThemeMode: String = "System",
     val dailyRemindersEnabled: Boolean = false,
-    val reminderMinutesAfterMidnight: Int? = null
+    val reminderMinutesAfterMidnight: Int? = null,
+    val updatedAtMillis: Long = 0L,
+    val autoCloudSyncEnabled: Boolean = true
 ) {
     companion object {
         const val LOCAL_PROFILE_ID = "local"

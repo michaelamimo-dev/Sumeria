@@ -23,17 +23,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.michaelamimo.sumeria.R
 import com.michaelamimo.sumeria.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.Image
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun SplashScreen(
     onSplashFinished: (isLoggedIn: Boolean) -> Unit,
-    viewModel: AuthViewModel = viewModel()
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
     var startAnimation by remember { mutableStateOf(false) }
     val alphaAnim by animateFloatAsState(
@@ -237,11 +238,11 @@ fun OnboardingPage(page: Int) {
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateToSignUp: () -> Unit,
-    viewModel: AuthViewModel = viewModel()
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val authState by viewModel.authState.collectAsState()
+    val authState by viewModel.authState.collectAsStateWithLifecycle()
 
     LaunchedEffect(authState) {
         if (authState is AuthState.Authenticated) {
@@ -300,7 +301,7 @@ fun LoginScreen(
             )
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                TextButton(onClick = { /* TODO: Forgot Password API */ }) {
+                TextButton(onClick = { viewModel.sendPasswordReset(email) }, enabled = authState !is AuthState.Loading) {
                     Text("Forgot password?", color = SumeriaColors.ActionPrimary, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                 }
             }
@@ -323,6 +324,10 @@ fun LoginScreen(
                     textAlign = TextAlign.Center
                 )
             }
+            if (authState == AuthState.PasswordResetSent) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Password reset instructions have been sent to your email.", color = SumeriaColors.ActionPrimary, style = MaterialTheme.typography.bodySmall)
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
             SumeriaDivider(text = "Don't have an account yet?")
@@ -341,9 +346,9 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            SumeriaSocialButton(text = "Sign in with Google", iconRes = R.drawable.ic_google_logo, onClick = { /* TODO */ })
+            SumeriaSocialButton(text = "Sign in with Google", iconRes = R.drawable.ic_google_logo, onClick = { viewModel.providerNotConfigured("Google") })
             Spacer(modifier = Modifier.height(16.dp))
-            SumeriaSocialButton(text = "Sign in with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { /* TODO */ })
+            SumeriaSocialButton(text = "Sign in with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { viewModel.providerNotConfigured("Microsoft") })
 
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -354,12 +359,12 @@ fun LoginScreen(
 fun SignUpScreen(
     onSignUpSuccess: () -> Unit,
     onNavigateToLogin: () -> Unit,
-    viewModel: AuthViewModel = viewModel()
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    val authState by viewModel.authState.collectAsState()
+    val authState by viewModel.authState.collectAsStateWithLifecycle()
     var localError by remember { mutableStateOf("") }
 
     val hasMinLength = password.length >= 8
@@ -483,9 +488,9 @@ fun SignUpScreen(
             SumeriaDivider(text = "or")
             Spacer(modifier = Modifier.height(32.dp))
 
-            SumeriaSocialButton(text = "Continue with Google", iconRes = R.drawable.ic_google_logo, onClick = { /* TODO */ })
+            SumeriaSocialButton(text = "Continue with Google", iconRes = R.drawable.ic_google_logo, onClick = { viewModel.providerNotConfigured("Google") })
             Spacer(modifier = Modifier.height(16.dp))
-            SumeriaSocialButton(text = "Continue with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { /* TODO */ })
+            SumeriaSocialButton(text = "Continue with Microsoft", iconRes = R.drawable.ic_microsoft_logo, onClick = { viewModel.providerNotConfigured("Microsoft") })
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -524,7 +529,8 @@ fun ValidationItem(text: String, isValid: Boolean) {
 
 fun getFriendlyErrorMessage(rawMessage: String, isSignIn: Boolean): String {
     return if (isSignIn) {
-        "We couldn’t sign you in. Please check your email and password."
+        if (rawMessage.contains("has not been configured", ignoreCase = true)) rawMessage
+        else "We couldn’t sign you in. Please check your email and password."
     } else {
         if (rawMessage.contains("badly formatted", ignoreCase = true)) {
             "That doesn’t look like a valid email address. Please check and try again."

@@ -50,7 +50,7 @@ import com.michaelamimo.sumeria.ui.stats.StatsScreen
 import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 
 @Composable
-fun MainNavigationScreen() {
+fun MainNavigationScreen(onSignedOut: () -> Unit) {
     val bottomNavController = rememberNavController()
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
@@ -131,7 +131,7 @@ fun MainNavigationScreen() {
             }
 
             composable(Screen.Settings.route) {
-                SettingsScreen()
+                SettingsScreen(onSignOut = onSignedOut)
             }
         }
     }
