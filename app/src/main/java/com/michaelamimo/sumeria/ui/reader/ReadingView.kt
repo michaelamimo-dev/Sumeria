@@ -13,7 +13,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,7 +38,8 @@ fun ReadingView(
     prefs: ReaderPreferences,
     onToggleOverlay: () -> Unit,
     onScroll: () -> Unit,
-    onPositionChanged: (blockIndex: Int, sectionIndex: Int, scrollOffset: Int) -> Unit
+    onPositionChanged: (blockIndex: Int, sectionIndex: Int, scrollOffset: Int) -> Unit,
+    onWordSelected: (String) -> Unit
 ) {
     val blocks = remember(sections) {
         sections.flatMapIndexed { sectionIndex, section ->
@@ -84,7 +87,7 @@ fun ReadingView(
                 )
             ) {
                 itemsIndexed(blocks) { _, block ->
-                    ReaderTextBlock(block, prefs)
+                    ReaderTextBlock(block, prefs, onWordSelected)
                 }
             }
         } else {
@@ -120,7 +123,7 @@ fun ReadingView(
                             bottom = 32.dp
                         )
                 ) {
-                    ReaderTextBlock(blocks[page], prefs)
+                    ReaderTextBlock(blocks[page], prefs, onWordSelected)
                 }
             }
         }
@@ -128,7 +131,7 @@ fun ReadingView(
 }
 
 @Composable
-private fun ReaderTextBlock(block: ReaderBlock, prefs: ReaderPreferences) {
+private fun ReaderTextBlock(block: ReaderBlock, prefs: ReaderPreferences, onWordSelected: (String) -> Unit) {
     if (block.isHeading) {
         Text(
             text = block.text,
@@ -139,6 +142,7 @@ private fun ReaderTextBlock(block: ReaderBlock, prefs: ReaderPreferences) {
             modifier = Modifier.padding(bottom = 32.dp)
         )
     } else {
+        var textLayout by remember(block.text) { mutableStateOf<TextLayoutResult?>(null) }
         SelectionContainer {
             Text(
                 text = block.text,
@@ -147,8 +151,31 @@ private fun ReaderTextBlock(block: ReaderBlock, prefs: ReaderPreferences) {
                 lineHeight = (prefs.fontSize * prefs.lineSpacing).sp,
                 color = prefs.theme.text,
                 textAlign = if (prefs.textAlignment == TextAlignment.Left) TextAlign.Start else TextAlign.Justify,
-                modifier = Modifier.padding(bottom = 24.dp)
+                modifier = Modifier
+                    .padding(bottom = 24.dp)
+                    .pointerInput(block.text) {
+                        detectTapGestures(onLongPress = { position: Offset ->
+                            val offset = textLayout?.getOffsetForPosition(position) ?: return@detectTapGestures
+                            block.text.wordAt(offset)?.let(onWordSelected)
+                        })
+                    },
+                onTextLayout = { textLayout = it }
             )
         }
     }
 }
+
+private fun String.wordAt(offset: Int): String? {
+    if (isEmpty()) return null
+    var cursor = offset.coerceIn(0, lastIndex)
+    if (!this[cursor].isLetterOrDigit() && cursor > 0 && this[cursor - 1].isLetterOrDigit()) cursor--
+    if (!this[cursor].isLetterOrDigit()) return null
+    var start = cursor
+    var end = cursor + 1
+    while (start > 0 && isWordCharacter(this[start - 1])) start--
+    while (end < length && isWordCharacter(this[end])) end++
+    return substring(start, end).trim('-', '\'', '’').takeIf { it.isNotBlank() }
+}
+
+private fun isWordCharacter(character: Char): Boolean =
+    character.isLetterOrDigit() || character == '-' || character == '\'' || character == '’'

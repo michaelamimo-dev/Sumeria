@@ -31,6 +31,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle.State as LifecycleState
 import com.michaelamimo.sumeria.domain.model.ReaderBookmark as SavedReaderBookmark
+import com.michaelamimo.sumeria.domain.model.SessionMode
 import org.json.JSONObject
 
 @Composable
@@ -152,7 +153,8 @@ fun ReaderScreen(
                                 prefs = prefs,
                                 onToggleOverlay = { overlayVisible = !overlayVisible },
                                 onScroll = { overlayVisible = false },
-                                onPositionChanged = viewModel::onPositionChanged
+                                onPositionChanged = viewModel::onPositionChanged,
+                                onWordSelected = viewModel::lookupWord
                             )
                             ReaderOverlay(
                                 isVisible = overlayVisible,
@@ -163,19 +165,59 @@ fun ReaderScreen(
                                 progression = state.progression,
                                 currentMode = currentMode,
                                 onBackClick = { viewModel.saveProgressNow(onNavigateBack) },
-                                onModeSwitch = { currentMode = it; overlayVisible = true },
+                                onModeSwitch = {
+                                    currentMode = it
+                                    viewModel.onReadingModeChanged(if (it == ReadingMode.Audio) SessionMode.AUDIO else SessionMode.TEXT)
+                                    overlayVisible = true
+                                },
+                                onDictionaryClick = viewModel::showDictionary,
                                 onSettingsClick = { showSettingsSheet = true },
                                 onBookmarkToggle = viewModel::toggleBookmark
                             )
                         }
                         ReadingMode.Audio -> {
+                            val passages = remember(currentDoc) {
+                                currentDoc.sections.flatMapIndexed { sectionIndex, section ->
+                                    section.paragraphs.mapIndexed { paragraphIndex, text ->
+                                        AudioPassage(sectionIndex, paragraphIndex, section.title, text)
+                                    }
+                                }
+                            }
+                            val initialPassageIndex = passages.indexOfFirst { passage ->
+                                passage.sectionIndex == state.currentSectionIndex &&
+                                    passage.paragraphIndex == (state.currentBlockIndex - currentDoc.sections
+                                        .take(state.currentSectionIndex)
+                                        .sumOf { it.paragraphs.size + 1 } - 1)
+                            }.takeIf { it >= 0 } ?: passages.indexOfFirst { it.sectionIndex == state.currentSectionIndex }.coerceAtLeast(0)
                             AudioPlayerView(
+                                bookTitle = currentBook.title,
+                                author = currentBook.authors.joinToString().ifBlank { "Unknown author" },
+                                coverUri = currentBook.coverUri,
+                                passages = passages,
+                                initialPassageIndex = initialPassageIndex,
                                 isBookmarked = isBookmarked,
                                 onBookmarkToggle = viewModel::toggleBookmark,
-                                onBackToText = { currentMode = ReadingMode.Text }
+                                onPassageChanged = { passage ->
+                                    viewModel.onAudioParagraphChanged(passage.sectionIndex, passage.paragraphIndex)
+                                },
+                                onBackToText = {
+                                    currentMode = ReadingMode.Text
+                                    viewModel.onReadingModeChanged(SessionMode.TEXT)
+                                }
                             )
                         }
                     }
+                }
+
+                state.dictionary?.let { dictionaryState ->
+                    DictionaryLookupDialog(
+                        state = dictionaryState,
+                        onLookup = viewModel::lookupWord,
+                        onDismiss = viewModel::dismissDictionary,
+                        background = prefs.theme.background,
+                        foreground = prefs.theme.text,
+                        accent = prefs.theme.controlsBackground
+                    )
                 }
 
                 if (showSettingsSheet) {

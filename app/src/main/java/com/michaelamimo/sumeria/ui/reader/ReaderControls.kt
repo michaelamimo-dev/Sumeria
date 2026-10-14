@@ -15,6 +15,7 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +43,7 @@ fun ReaderOverlay(
     onBackClick: () -> Unit,
     onModeSwitch: (ReadingMode) -> Unit,
     onSettingsClick: () -> Unit,
+    onDictionaryClick: () -> Unit,
     onBookmarkToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -146,6 +148,12 @@ fun ReaderOverlay(
                             onModeSwitch(ReadingMode.Audio)
                         }
                         Box(Modifier.width(1.dp).height(24.dp).background(ink.copy(alpha = 0.2f)).padding(horizontal = 4.dp))
+                        IconButton(
+                            onClick = onDictionaryClick,
+                            modifier = Modifier.size(44.dp).semantics { contentDescription = "Open dictionary" }
+                        ) {
+                            Icon(Icons.Rounded.Translate, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
+                        }
                         IconButton(
                             onClick = onSettingsClick,
                             modifier = Modifier.size(44.dp).semantics { contentDescription = "Reading settings" }

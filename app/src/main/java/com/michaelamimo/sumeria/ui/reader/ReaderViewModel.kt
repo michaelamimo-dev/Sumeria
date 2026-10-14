@@ -5,13 +5,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.os.SystemClock
 import com.michaelamimo.sumeria.domain.model.BookFormat
+import com.michaelamimo.sumeria.domain.model.DictionaryEntry
 import com.michaelamimo.sumeria.domain.model.LibraryBook
 import com.michaelamimo.sumeria.domain.model.ReaderBookmark as SavedReaderBookmark
 import com.michaelamimo.sumeria.domain.model.ReaderDocument
 import com.michaelamimo.sumeria.domain.model.ReadingProgress
 import com.michaelamimo.sumeria.domain.model.ReadingSession
+import com.michaelamimo.sumeria.domain.model.SessionMode
 import com.michaelamimo.sumeria.domain.model.UserPreferences
 import com.michaelamimo.sumeria.domain.repository.LibraryBookRepository
+import com.michaelamimo.sumeria.domain.repository.DictionaryRepository
 import com.michaelamimo.sumeria.domain.repository.ReaderBookmarkRepository
 import com.michaelamimo.sumeria.domain.repository.ReaderContentRepository
 import com.michaelamimo.sumeria.domain.repository.ReadingProgressRepository
@@ -40,10 +43,18 @@ data class ReaderUiState(
     val error: String? = null,
     val preferences: ReaderPreferences = ReaderPreferences(),
     val bookmarks: List<SavedReaderBookmark> = emptyList(),
+    val dictionary: DictionaryLookupState? = null,
     val currentBlockIndex: Int = 0,
     val currentSectionIndex: Int = 0,
     val currentScrollOffset: Int = 0,
     val progression: Float = 0f
+)
+
+data class DictionaryLookupState(
+    val word: String = "",
+    val isLoading: Boolean = false,
+    val entry: DictionaryEntry? = null,
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -51,6 +62,7 @@ class ReaderViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val bookRepository: LibraryBookRepository,
     private val contentRepository: ReaderContentRepository,
+    private val dictionaryRepository: DictionaryRepository,
     private val progressRepository: ReadingProgressRepository,
     private val sessionRepository: ReadingSessionRepository,
     private val bookmarkRepository: ReaderBookmarkRepository,
@@ -63,6 +75,8 @@ class ReaderViewModel @Inject constructor(
     private var progressSaveJob: Job? = null
     private var sessionTimerJob: Job? = null
     private var activeSession: ActiveSession? = null
+    private var currentSessionMode: SessionMode = SessionMode.TEXT
+    private var dictionaryLookupJob: Job? = null
     private var wordCountPrefix: IntArray = intArrayOf(0)
 
     private data class ActiveSession(
@@ -71,7 +85,8 @@ class ReaderViewModel @Inject constructor(
         val startedAtMillis: Long,
         val startedAtElapsedMillis: Long,
         val startBlockIndex: Int,
-        val startSectionIndex: Int
+        val startSectionIndex: Int,
+        val mode: SessionMode
     )
 
     init {
@@ -164,6 +179,61 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    fun showDictionary() {
+        dictionaryLookupJob?.cancel()
+        _uiState.update { it.copy(dictionary = DictionaryLookupState()) }
+    }
+
+    fun lookupWord(word: String) {
+        val normalized = word.trim()
+        if (normalized.isEmpty()) {
+            _uiState.update { it.copy(dictionary = DictionaryLookupState(error = "Enter a word to look up.")) }
+            return
+        }
+        dictionaryLookupJob?.cancel()
+        _uiState.update { it.copy(dictionary = DictionaryLookupState(word = normalized, isLoading = true)) }
+        dictionaryLookupJob = viewModelScope.launch {
+            try {
+                val definition = dictionaryRepository.lookup(normalized)
+                _uiState.update { it.copy(dictionary = DictionaryLookupState(word = normalized, entry = definition)) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(dictionary = DictionaryLookupState(word = normalized, error = error.message ?: "Dictionary lookup failed."))
+                }
+            }
+        }
+    }
+
+    fun dismissDictionary() {
+        dictionaryLookupJob?.cancel()
+        dictionaryLookupJob = null
+        _uiState.update { it.copy(dictionary = null) }
+    }
+
+    fun onAudioParagraphChanged(sectionIndex: Int, paragraphIndex: Int) {
+        val sections = _uiState.value.document?.sections ?: return
+        val section = sections.getOrNull(sectionIndex) ?: return
+        if (section.paragraphs.isEmpty()) return
+        val blockIndex = sections.take(sectionIndex).sumOf { it.paragraphs.size + 1 } + 1 +
+            paragraphIndex.coerceIn(0, section.paragraphs.lastIndex)
+        onPositionChanged(blockIndex, sectionIndex, 0)
+    }
+
+    fun onReadingModeChanged(mode: SessionMode) {
+        if (currentSessionMode == mode) return
+        currentSessionMode = mode
+        val previousSession = activeSession ?: return
+        activeSession = null
+        sessionTimerJob?.cancel()
+        sessionTimerJob = null
+        viewModelScope.launch {
+            persistActiveSession(previousSession, ended = true)
+            onReaderForeground()
+        }
+    }
+
     /** Starts a foreground reading interval. Repeated lifecycle notifications are safe. */
     fun onReaderForeground() {
         if (activeSession != null) return
@@ -177,7 +247,8 @@ class ReaderViewModel @Inject constructor(
             startedAtMillis = now,
             startedAtElapsedMillis = SystemClock.elapsedRealtime(),
             startBlockIndex = state.currentBlockIndex,
-            startSectionIndex = state.currentSectionIndex
+            startSectionIndex = state.currentSectionIndex,
+            mode = currentSessionMode
         )
         activeSession = session
         sessionTimerJob?.cancel()
@@ -238,7 +309,8 @@ class ReaderViewModel @Inject constructor(
                 endedAtMillis = if (ended) System.currentTimeMillis() else null,
                 durationMillis = elapsed,
                 pagesRead = pagesRead,
-                wordsRead = wordsRead
+                wordsRead = wordsRead,
+                mode = session.mode
             )
         )
     }
