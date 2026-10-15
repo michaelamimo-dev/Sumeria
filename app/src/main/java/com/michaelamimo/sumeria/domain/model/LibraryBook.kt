@@ -14,5 +14,6 @@ data class LibraryBook(
     val genre: String? = null,
     val totalPages: Int? = null,
     val addedAtMillis: Long,
-    val lastOpenedAtMillis: Long? = null
+    val lastOpenedAtMillis: Long? = null,
+    val fileSizeBytes: Long? = null
 )

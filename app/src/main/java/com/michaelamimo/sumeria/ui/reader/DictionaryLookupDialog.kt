@@ -13,6 +13,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -30,6 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.VolumeUp
+import android.speech.tts.TextToSpeech
+import androidx.compose.runtime.DisposableEffect
 
 @Composable
 fun DictionaryLookupDialog(
@@ -41,6 +48,9 @@ fun DictionaryLookupDialog(
     accent: Color
 ) {
     var word by remember(state.word) { mutableStateOf(state.word) }
+    val context = LocalContext.current
+    val speech = remember(context) { TextToSpeech(context) {} }
+    DisposableEffect(speech) { onDispose { speech.stop(); speech.shutdown() } }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = background,
@@ -79,10 +89,15 @@ fun DictionaryLookupDialog(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     state.entry != null -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(state.entry.word, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = foreground)
-                            state.entry.phonetic?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, color = foreground.copy(alpha = 0.68f))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(state.entry.word, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = foreground)
+                                state.entry.phonetic?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = foreground.copy(alpha = 0.68f))
+                                }
+                            }
+                            IconButton(onClick = { speech.speak(state.entry.word, TextToSpeech.QUEUE_FLUSH, null, "dictionary-pronunciation") }) {
+                                Icon(Icons.Rounded.VolumeUp, contentDescription = "Pronounce ${state.entry.word}", tint = accent)
                             }
                         }
                         state.entry.definitions.forEachIndexed { index, definition ->

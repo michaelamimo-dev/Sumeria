@@ -223,10 +223,21 @@ fun ReaderSettingsSheet(
 
             SectionLabel("READING COMFORT")
             SettingCard {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Brightness6, contentDescription = null, tint = Ink, modifier = Modifier.size(18.dp))
-                    Text("  Screen brightness", color = Ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Text("Coming soon", color = MutedInk, fontSize = 11.sp)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Brightness6, contentDescription = null, tint = Ink, modifier = Modifier.size(18.dp))
+                        Text("  Screen brightness", color = Ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text(if (prefs.brightness < 0f) "System" else "${(prefs.brightness * 100).toInt()}%", color = MutedInk, fontSize = 11.sp)
+                    }
+                    Slider(
+                        value = if (prefs.brightness < 0f) 0.5f else prefs.brightness,
+                        onValueChange = { onPrefsChange(prefs.copy(brightness = it.coerceIn(0.05f, 1f))) },
+                        valueRange = 0.05f..1f,
+                        colors = SliderDefaults.colors(thumbColor = Ink, activeTrackColor = Ink, inactiveTrackColor = Ink.copy(alpha = 0.16f))
+                    )
+                    TextButton(onClick = { onPrefsChange(prefs.copy(brightness = -1f)) }) {
+                        Text("Use device brightness", color = Ink)
+                    }
                 }
             }
 

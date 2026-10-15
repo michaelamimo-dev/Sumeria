@@ -18,15 +18,16 @@ data class BookEntity(
     val genre: String?,
     val totalPages: Int?,
     val addedAtMillis: Long,
-    val lastOpenedAtMillis: Long?
+    val lastOpenedAtMillis: Long?,
+    @androidx.room.ColumnInfo(defaultValue = "0") val fileSizeBytes: Long = 0L
 )
 
 internal fun BookEntity.toDomain() = LibraryBook(
     id, title, AuthorsJson.decode(authorsJson), description, format, sourceUri, coverUri,
-    genre, totalPages, addedAtMillis, lastOpenedAtMillis
+    genre, totalPages, addedAtMillis, lastOpenedAtMillis, fileSizeBytes.takeIf { it > 0L }
 )
 
 internal fun LibraryBook.toEntity(ownerUserId: String = "local") = BookEntity(
     ownerUserId, id, title, AuthorsJson.encode(authors), description, format, sourceUri, coverUri,
-    genre, totalPages, addedAtMillis, lastOpenedAtMillis
+    genre, totalPages, addedAtMillis, lastOpenedAtMillis, fileSizeBytes ?: 0L
 )

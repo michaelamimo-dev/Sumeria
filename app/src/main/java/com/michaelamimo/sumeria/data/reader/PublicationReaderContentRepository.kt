@@ -10,6 +10,7 @@ import com.michaelamimo.sumeria.domain.model.LibraryBook
 import com.michaelamimo.sumeria.domain.model.ReaderDocument
 import com.michaelamimo.sumeria.domain.model.ReaderSection
 import com.michaelamimo.sumeria.domain.repository.ReaderContentRepository
+import org.readium.r2.shared.publication.Publication
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -49,6 +50,27 @@ class PublicationReaderContentRepository @Inject constructor(
         when (book.format) {
             BookFormat.EPUB -> loadEpub(sourceUri)
             BookFormat.PDF -> loadPdf(sourceUri)
+        }
+    }
+
+    /** Keeps the Readium publication open for the native EPUB/PDF navigator while it is visible. */
+    suspend fun openForNavigation(book: LibraryBook): OpenReadiumPublication = withContext(Dispatchers.IO) {
+        val sourceUri = book.sourceUri ?: throw IOException("The original book file is no longer available.")
+        val url = Uri.parse(sourceUri).toAbsoluteUrl() ?: throw IOException("The selected book file cannot be opened.")
+        val asset = assetRetriever.retrieve(url).getOrElse { error ->
+            throw IOException("The book could not be opened: $error")
+        }
+        try {
+            val publication = publicationOpener.open(asset, allowUserInteraction = false).getOrElse { error ->
+                throw IOException("The book could not be parsed: $error")
+            }
+            OpenReadiumPublication(publication) {
+                publication.close()
+                asset.close()
+            }
+        } catch (error: Throwable) {
+            asset.close()
+            throw error
         }
     }
 
@@ -98,8 +120,9 @@ class PublicationReaderContentRepository @Inject constructor(
                         paragraphs = paragraphs
                     )
                 }
-                if (sections.isEmpty()) throw IOException("No readable text was found in this EPUB.")
-                ReaderDocument(sections = sections)
+                ReaderDocument(
+                    sections = sections.ifEmpty { listOf(ReaderSection(title = "Reading", paragraphs = emptyList())) }
+                )
             } finally {
                 publication.close()
             }
@@ -118,7 +141,6 @@ class PublicationReaderContentRepository @Inject constructor(
             PDDocument.load(stream).use { document ->
                 val stripper = PDFTextStripper()
                 val coroutineContext = currentCoroutineContext()
-                var hasSelectableText = false
                 val sections = buildList {
                     for (pageNumber in 1..document.numberOfPages) {
                         coroutineContext.ensureActive()
@@ -128,16 +150,14 @@ class PublicationReaderContentRepository @Inject constructor(
                         val paragraphs = text.split(Regex("\\n\\s*\\n"))
                             .map(String::trim)
                             .filter(String::isNotBlank)
-                        if (paragraphs.isNotEmpty()) hasSelectableText = true
                         add(
                             ReaderSection(
-                                title = "Page $pageNumber",
+                                title = "",
                                 paragraphs = paragraphs
                             )
                         )
                     }
                 }
-                if (!hasSelectableText) throw IOException("No selectable text was found in this PDF.")
                 ReaderDocument(sections = sections, totalPages = document.numberOfPages)
             }
         }
@@ -163,4 +183,11 @@ class PublicationReaderContentRepository @Inject constructor(
         val PDF_BOX_LOCK = Any()
         @Volatile var pdfBoxInitialized = false
     }
+}
+
+class OpenReadiumPublication(
+    val publication: Publication,
+    private val closeResources: () -> Unit
+) : AutoCloseable {
+    override fun close() = closeResources()
 }

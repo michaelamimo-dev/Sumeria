@@ -19,7 +19,8 @@ import javax.inject.Inject
 data class CloudSyncUiState(
     val autoSyncEnabled: Boolean = true,
     val isSyncing: Boolean = false,
-    val status: String = "Ready to sync"
+    val status: String = "Ready to sync",
+    val preferences: UserPreferences = UserPreferences()
 )
 
 @HiltViewModel
@@ -34,7 +35,7 @@ class CloudSyncViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             preferencesRepository.observe().collect { preferences ->
-                _state.update { it.copy(autoSyncEnabled = preferences.autoCloudSyncEnabled) }
+                _state.update { it.copy(autoSyncEnabled = preferences.autoCloudSyncEnabled, preferences = preferences) }
             }
         }
     }
@@ -44,6 +45,44 @@ class CloudSyncViewModel @Inject constructor(
             val current = preferencesRepository.get()
             preferencesRepository.save(current.copy(autoCloudSyncEnabled = enabled))
             _state.update { it.copy(autoSyncEnabled = enabled, status = if (enabled) "Automatic sync enabled" else "Automatic sync paused") }
+        }
+    }
+
+    fun updateDailyReminder(enabled: Boolean, minutesAfterMidnight: Int? = null) {
+        viewModelScope.launch {
+            val current = preferencesRepository.get()
+            preferencesRepository.save(
+                current.copy(
+                    dailyRemindersEnabled = enabled,
+                    reminderMinutesAfterMidnight = minutesAfterMidnight ?: current.reminderMinutesAfterMidnight
+                )
+            )
+        }
+    }
+
+    fun updateAppTheme(mode: String) {
+        viewModelScope.launch {
+            preferencesRepository.save(preferencesRepository.get().copy(appThemeMode = mode))
+        }
+    }
+
+    fun updateReaderTheme(theme: String) {
+        viewModelScope.launch {
+            preferencesRepository.save(preferencesRepository.get().copy(readerTheme = theme))
+        }
+    }
+
+    fun updateDailyGoal(minutes: Int) {
+        if (minutes <= 0) return
+        viewModelScope.launch {
+            preferencesRepository.save(preferencesRepository.get().copy(dailyGoalMinutes = minutes))
+        }
+    }
+
+    fun updateYearlyBookGoal(books: Int) {
+        if (books <= 0) return
+        viewModelScope.launch {
+            preferencesRepository.save(preferencesRepository.get().copy(yearlyBookGoal = books))
         }
     }
 

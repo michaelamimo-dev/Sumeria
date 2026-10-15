@@ -79,7 +79,7 @@ fun ReaderOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBackClick, modifier = Modifier.size(44.dp)) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back to library", tint = ink)
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = ink)
                     }
                     Column(modifier = Modifier.weight(1f).padding(start = 5.dp)) {
                         Text(bookTitle.uppercase(), color = ink.copy(alpha = 0.68f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, maxLines = 1)

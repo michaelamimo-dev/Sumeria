@@ -77,7 +77,8 @@ class ReadiumPublicationImporter @Inject constructor(
                     coverUri = coverUri,
                     genre = metadata.subjects.firstOrNull()?.name,
                     totalPages = metadata.numberOfPages,
-                    addedAtMillis = System.currentTimeMillis()
+                    addedAtMillis = System.currentTimeMillis(),
+                    fileSizeBytes = queryFileSize(uri)
                 )
             } finally {
                 publication.close()
@@ -95,6 +96,16 @@ class ReadiumPublicationImporter @Inject constructor(
         null
     )?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null
+    }
+
+    private fun queryFileSize(uri: Uri): Long? = context.contentResolver.query(
+        uri,
+        arrayOf(OpenableColumns.SIZE),
+        null,
+        null,
+        null
+    )?.use { cursor ->
+        if (cursor.moveToFirst()) cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE)).takeIf { it > 0L } else null
     }
 
     private fun contentId(uri: Uri): String {

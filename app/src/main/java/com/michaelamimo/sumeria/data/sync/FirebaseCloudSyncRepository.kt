@@ -167,7 +167,8 @@ class FirebaseCloudSyncRepository @Inject constructor(
                 genre = doc.getString("genre"),
                 totalPages = doc.long("totalPages")?.toInt(),
                 addedAtMillis = doc.long("addedAtMillis") ?: System.currentTimeMillis(),
-                lastOpenedAtMillis = remoteLastOpened ?: existing?.lastOpenedAtMillis
+                lastOpenedAtMillis = remoteLastOpened ?: existing?.lastOpenedAtMillis,
+                fileSizeBytes = doc.long("fileSizeBytes") ?: existing?.fileSizeBytes ?: 0L
             ))
         }
     }
@@ -255,7 +256,12 @@ class FirebaseCloudSyncRepository @Inject constructor(
             dailyRemindersEnabled = doc.getBoolean("dailyRemindersEnabled") ?: false,
             reminderMinutesAfterMidnight = doc.long("reminderMinutesAfterMidnight")?.toInt(),
             updatedAtMillis = updatedAt,
-            autoCloudSyncEnabled = doc.getBoolean("autoCloudSyncEnabled") ?: true
+            autoCloudSyncEnabled = doc.getBoolean("autoCloudSyncEnabled") ?: true,
+            readerBrightness = doc.getDouble("readerBrightness")?.toFloat() ?: -1f,
+            libraryShelvesJson = doc.getString("libraryShelvesJson") ?: "[]",
+            libraryMembershipJson = doc.getString("libraryMembershipJson") ?: "{}",
+            librarySortOrder = doc.getString("librarySortOrder") ?: "DateAdded",
+            audioVoiceName = doc.getString("audioVoiceName") ?: ""
         ))
     }
 
@@ -270,7 +276,8 @@ class FirebaseCloudSyncRepository @Inject constructor(
     private fun BookEntity.toCloudMap() = mapOf(
         "title" to title, "authors" to AuthorsJson.decode(authorsJson), "description" to description,
         "format" to format.name, "genre" to genre, "totalPages" to totalPages,
-        "addedAtMillis" to addedAtMillis, "lastOpenedAtMillis" to lastOpenedAtMillis
+        "addedAtMillis" to addedAtMillis, "lastOpenedAtMillis" to lastOpenedAtMillis,
+        "fileSizeBytes" to fileSizeBytes
     )
     private fun ReadingProgressEntity.toCloudMap() = mapOf(
         "bookId" to bookId, "locationJson" to locationJson, "currentPage" to currentPage,
@@ -292,7 +299,9 @@ class FirebaseCloudSyncRepository @Inject constructor(
         "readingStyle" to readingStyle, "textAlignment" to textAlignment,
         "appThemeMode" to appThemeMode, "dailyRemindersEnabled" to dailyRemindersEnabled,
         "reminderMinutesAfterMidnight" to reminderMinutesAfterMidnight, "updatedAtMillis" to updatedAtMillis,
-        "autoCloudSyncEnabled" to autoCloudSyncEnabled
+        "autoCloudSyncEnabled" to autoCloudSyncEnabled, "readerBrightness" to readerBrightness,
+        "libraryShelvesJson" to libraryShelvesJson, "libraryMembershipJson" to libraryMembershipJson,
+        "librarySortOrder" to librarySortOrder, "audioVoiceName" to audioVoiceName
     )
 
     private fun DocumentSnapshot.long(field: String): Long? = getLong(field)

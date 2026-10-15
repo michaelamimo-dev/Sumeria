@@ -128,7 +128,9 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
     var selectedBar by remember(range) { mutableStateOf(stats.bars.indexOfLast { !it.isFuture }) }
 
     val today = remember(data) { StatsData.today(data.sessions, data.dailyGoalMinutes) }
-    val clock = remember(data) { StatsData.readingClock(data.sessions) }
+    val weeklyReview = remember(data.sessions) { StatsData.completedWeeklyReview(data.sessions) }
+    val clock = remember(weeklyReview) { StatsData.readingClock(weeklyReview.sessions) }
+    val clockFacts = remember(weeklyReview) { StatsData.clockFacts(weeklyReview.sessions) }
     val genres = remember(data) { StatsData.genres(data) }
     val heatmapWeeks = remember(data) { StatsData.heatmapWeeks(data.sessions) }
     val badges = remember(data) { StatsData.badges(data, today.streak) }
@@ -233,16 +235,18 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                 Spacer(Modifier.height(20.dp))
             }
 
-            // Reading clock
-            item {
-                StatsSectionHeader(
-                    eyebrow = "WHEN YOU READ",
-                    title = "Your reading clock",
-                    trailing = null
-                )
-                Spacer(Modifier.height(16.dp))
-                ReadingClockCard(parts = clock)
-                Spacer(Modifier.height(32.dp))
+            // Reading clock is shown for the latest completed weekly review only.
+            if (weeklyReview.isReady) {
+                item {
+                    StatsSectionHeader(
+                        eyebrow = "WEEKLY REVIEW · ${weeklyReview.rangeLabel.uppercase()}",
+                        title = "Your reading clock",
+                        trailing = null
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    ReadingClockCard(parts = clock, mostActiveDay = clockFacts.first, peakHour = clockFacts.second)
+                    Spacer(Modifier.height(32.dp))
+                }
             }
 
             // Genres
@@ -265,7 +269,7 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                     trailing = null
                 )
                 Spacer(Modifier.height(16.dp))
-                YearGoalCard(goal = yearGoal, onEditGoal = { editingGoal = EditableGoal.Yearly(data.yearlyBookGoal) })
+                YearGoalCard(goal = yearGoal)
                 Spacer(Modifier.height(32.dp))
             }
 
@@ -283,16 +287,18 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                 Spacer(Modifier.height(32.dp))
             }
 
-            // Insights
-            item {
-                StatsSectionHeader(
-                    eyebrow = "WORTH NOTICING",
-                    title = "Insights",
-                    trailing = null
-                )
-                Spacer(Modifier.height(16.dp))
-                InsightsList(stats = stats, clock = clock, today = today)
-                Spacer(Modifier.height(32.dp))
+            // Insights are held until the current reading week has ended.
+            if (weeklyReview.isReady) {
+                item {
+                    StatsSectionHeader(
+                        eyebrow = "WORTH NOTICING · ${weeklyReview.rangeLabel.uppercase()}",
+                        title = "Weekly insights",
+                        trailing = null
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    WeeklyReviewInsights(review = weeklyReview, clock = clock)
+                    Spacer(Modifier.height(32.dp))
+                }
             }
 
             // Milestones
@@ -1136,7 +1142,7 @@ private data class DayPart(
 )
 
 @Composable
-private fun ReadingClockCard(parts: List<DayPart>) {
+private fun ReadingClockCard(parts: List<DayPart>, mostActiveDay: Pair<String, String>, peakHour: Pair<String, String>) {
     val top = parts.maxBy { it.percent }
     val hasReading = top.percent > 0
     val persona = when (top.label) {
@@ -1241,15 +1247,15 @@ private fun ReadingClockCard(parts: List<DayPart>) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MiniFact(
                     label = "MOST ACTIVE DAY",
-                    value = "Saturday",
-                    note = "avg 52 min",
+                    value = mostActiveDay.first,
+                    note = mostActiveDay.second,
                     color = Cream,
                     modifier = Modifier.weight(1f)
                 )
                 MiniFact(
                     label = "PEAK HOUR",
-                    value = "7–8 AM",
-                    note = "your focus window",
+                    value = peakHour.first,
+                    note = peakHour.second,
                     color = Sky,
                     modifier = Modifier.weight(1f)
                 )
@@ -1441,7 +1447,7 @@ private data class YearGoal(
 )
 
 @Composable
-private fun YearGoalCard(goal: YearGoal, onEditGoal: () -> Unit) {
+private fun YearGoalCard(goal: YearGoal) {
     val progress = goal.finished.toFloat() / goal.target
     val remaining = max(goal.target - goal.finished, 0)
     val perMonth = if (goal.monthsLeft > 0f) remaining / goal.monthsLeft else 0f
@@ -1500,9 +1506,6 @@ private fun YearGoalCard(goal: YearGoal, onEditGoal: () -> Unit) {
                             color = Ink,
                             modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp)
                         )
-                    }
-                    TextButton(onClick = onEditGoal, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                        Text("Change goal", style = MaterialTheme.typography.labelSmall, color = Ink)
                     }
                 }
 
@@ -1587,7 +1590,8 @@ private data class HeatCell(
     val minutes: Int,
     val day: Int,
     val month: Int, // 1..12
-    val year: Int
+    val year: Int,
+    val date: LocalDate
 )
 
 private data class HeatWeek(val cells: List<HeatCell>)
@@ -1605,6 +1609,7 @@ private fun HeatWeek.rangeLabel(): String {
 
 @Composable
 private fun HeatmapCard(weeks: List<HeatWeek>, goal: Int) {
+    var selectedDay by remember { mutableStateOf<HeatCell?>(null) }
     val letters = listOf("M", "T", "W", "T", "F", "S", "S")
     val allCells = weeks.flatMap { it.cells }
     val firstCell = allCells.first()
@@ -1712,8 +1717,7 @@ private fun HeatmapCard(weeks: List<HeatWeek>, goal: Int) {
                         horizontalArrangement = Arrangement.spacedBy(cellGap)
                     ) {
                         week.cells.forEachIndexed { dayIndex, cell ->
-                            val isToday = weekIndex == weeks.lastIndex &&
-                                    dayIndex == week.cells.lastIndex
+                            val isToday = cell.date == LocalDate.now()
                             val isMonthStart = cell.day == 1
 
                             Box(
@@ -1722,6 +1726,7 @@ private fun HeatmapCard(weeks: List<HeatWeek>, goal: Int) {
                                     .height(34.dp)
                                     .clip(RoundedCornerShape(9.dp))
                                     .background(heatColor(cell.minutes, goal))
+                                    .clickable { selectedDay = cell }
                                     .then(
                                         if (isToday) Modifier.border(2.dp, Ink, RoundedCornerShape(9.dp))
                                         else if (cell.minutes == 0) Modifier.border(1.dp, Line, RoundedCornerShape(9.dp))
@@ -1800,6 +1805,16 @@ private fun HeatmapCard(weeks: List<HeatWeek>, goal: Int) {
                 }
             }
         }
+    }
+
+    selectedDay?.let { cell ->
+        AlertDialog(
+            onDismissRequest = { selectedDay = null },
+            containerColor = Paper,
+            title = { Text(cell.date.format(DateTimeFormatter.ofPattern("EEEE, MMM d, yyyy", Locale.getDefault())), color = Ink, fontWeight = FontWeight.Bold) },
+            text = { Text("${cell.minutes} minutes read", color = Ink) },
+            confirmButton = { TextButton(onClick = { selectedDay = null }) { Text("Done", color = Ink) } }
+        )
     }
 }
 
@@ -1944,6 +1959,55 @@ private fun InsightsList(
             }
         }
         Spacer(Modifier.height(10.dp))
+    }
+}
+
+@Composable
+private fun WeeklyReviewInsights(review: WeeklyReview, clock: List<DayPart>) {
+    val strongestPart = clock.maxByOrNull { it.percent }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        WeeklyReviewInsightCard(
+            emoji = if (review.totalMinutes > 0) "📖" else "🌱",
+            title = if (review.totalMinutes > 0) "${review.totalMinutes} minutes with books" else "A quiet reading week",
+            body = if (review.activeDays > 0) {
+                "You read on ${review.activeDays} of 6 days in this completed week."
+            } else {
+                "No reading sessions were recorded for this week. Start a short session to begin a new rhythm."
+            },
+            tint = Mint
+        )
+        WeeklyReviewInsightCard(
+            emoji = strongestPart?.emoji ?: "⏰",
+            title = if (review.totalMinutes > 0) "${strongestPart?.label} was your reading window" else "Your pattern will appear here",
+            body = if (review.totalMinutes > 0) {
+                "${strongestPart?.percent ?: 0}% of your reading time happened in the ${strongestPart?.label?.lowercase()}s."
+            } else {
+                "Your reading clock will show a time of day after your next completed session."
+            },
+            tint = Cream
+        )
+    }
+}
+
+@Composable
+private fun WeeklyReviewInsightCard(emoji: String, title: String, body: String, tint: Color) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = SIDE.dp),
+        shape = RoundedCornerShape(22.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Line)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = CircleShape, color = tint, modifier = Modifier.size(46.dp)) {
+                Box(contentAlignment = Alignment.Center) { Text(emoji, fontSize = 21.sp) }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(title, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = Ink)
+                Spacer(Modifier.height(2.dp))
+                Text(body, style = MaterialTheme.typography.bodySmall, color = Sage)
+            }
+        }
     }
 }
 
@@ -2334,9 +2398,36 @@ private data class RangeStats(
     val totalMinutes: Int get() = bars.sumOf { it.minutes }
 }
 
+private data class WeeklyReview(
+    val sessions: List<ReadingSession>,
+    val rangeLabel: String,
+    val totalMinutes: Int,
+    val activeDays: Int,
+    val isReady: Boolean
+)
+
 private object StatsData {
     private val zone: ZoneId get() = ZoneId.systemDefault()
     private val todayDate: LocalDate get() = LocalDate.now(zone)
+
+    fun completedWeeklyReview(sessions: List<ReadingSession>): WeeklyReview {
+        val today = todayDate
+        val saturday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY))
+        val reviewIsReady = today.isAfter(saturday) ||
+            (today == saturday && java.time.LocalTime.now(zone).hour >= 18)
+        val end = if (reviewIsReady) saturday else saturday.minusWeeks(1)
+        val start = end.minusDays(5)
+        val selected = sessions.filter { it.date() in start..end }
+        val startLabel = start.format(DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()))
+        val endLabel = end.format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault()))
+        return WeeklyReview(
+            sessions = selected,
+            rangeLabel = "$startLabel – $endLabel",
+            totalMinutes = (selected.sumOf { it.durationMillis } / MILLIS_PER_MINUTE).toInt(),
+            activeDays = selected.map { it.date() }.distinct().size,
+            isReady = reviewIsReady
+        )
+    }
 
     fun today(sessions: List<ReadingSession>, dailyGoalMinutes: Int): TodayStats {
         val today = todayDate
@@ -2480,6 +2571,29 @@ private object StatsData {
         return details.mapIndexed { index, (emoji, detail) -> DayPart(emoji, detail.first, detail.second, if (total == 0) 0 else minutes[index] * 100 / total, colors[index]) }
     }
 
+    fun clockFacts(sessions: List<ReadingSession>): Pair<Pair<String, String>, Pair<String, String>> {
+        if (sessions.isEmpty()) return ("—" to "No reading data yet") to ("—" to "No reading data yet")
+        val weekdayTotals = IntArray(7)
+        val weekdayDays = IntArray(7)
+        val weekdaySeen = sessions.map { it.date() }.distinct()
+        weekdaySeen.forEach { weekdayDays[it.dayOfWeek.value - 1]++ }
+        sessions.forEach { session ->
+            weekdayTotals[session.date().dayOfWeek.value - 1] += (session.durationMillis / MILLIS_PER_MINUTE).toInt()
+        }
+        val activeDayIndex = weekdayTotals.indices.maxByOrNull { weekdayTotals[it] } ?: 0
+        val activeDayName = DayOfWeek.of(activeDayIndex + 1).getDisplayName(TextStyle.FULL, Locale.getDefault())
+        val averageMinutes = if (weekdayDays[activeDayIndex] == 0) 0 else weekdayTotals[activeDayIndex] / weekdayDays[activeDayIndex]
+        val hourTotals = IntArray(24)
+        sessions.forEach { session ->
+            val hour = Instant.ofEpochMilli(session.startedAtMillis).atZone(zone).hour
+            hourTotals[hour] += (session.durationMillis / MILLIS_PER_MINUTE).toInt()
+        }
+        val peakHour = hourTotals.indices.maxByOrNull { hourTotals[it] } ?: 0
+        val hourLabel = java.time.LocalTime.of(peakHour, 0).format(DateTimeFormatter.ofPattern("h a", Locale.getDefault())) + "–" +
+            java.time.LocalTime.of((peakHour + 1) % 24, 0).format(DateTimeFormatter.ofPattern("h a", Locale.getDefault()))
+        return (activeDayName to "avg $averageMinutes min on reading days") to (hourLabel to "most recorded reading time")
+    }
+
     fun genres(data: StatsDataState): List<GenreShare> {
         val durations = data.sessions.groupBy { session -> data.books.firstOrNull { it.id == session.bookId }?.genre?.takeIf(String::isNotBlank) ?: "Other" }
             .mapValues { (_, sessions) -> sessions.sumOf { it.durationMillis } }
@@ -2505,7 +2619,7 @@ private object StatsData {
         val byDay = minutesByDay(sessions)
         return (0 until 35).map { offset ->
             val date = first.plusDays(offset.toLong())
-            HeatCell(if (date.isAfter(today)) 0 else byDay[date] ?: 0, date.dayOfMonth, date.monthValue, date.year)
+            HeatCell(if (date.isAfter(today)) 0 else byDay[date] ?: 0, date.dayOfMonth, date.monthValue, date.year, date)
         }.chunked(7).map(::HeatWeek)
     }
 

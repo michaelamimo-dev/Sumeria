@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,6 +49,7 @@ fun ReaderScreen(
 
     val currentBook = state.book
     val currentDoc = state.document
+    val originalScreenBrightness = remember(activity) { activity?.window?.attributes?.screenBrightness ?: -1f }
 
     val savedBookmarks = remember(state.bookmarks, currentBook) {
         state.bookmarks.map { bookmark -> bookmark.toUiBookmark(currentBook?.title.orEmpty()) }
@@ -65,6 +69,7 @@ fun ReaderScreen(
 
     SideEffect {
         activity?.window?.let { window ->
+            window.attributes = window.attributes.apply { screenBrightness = prefs.brightness }
             WindowCompat.setDecorFitsSystemWindows(window, false)
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             WindowCompat.getInsetsController(window, view).apply {
@@ -80,6 +85,7 @@ fun ReaderScreen(
             window?.let {
                 if (wasFullscreen) it.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
                 else it.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                it.attributes = it.attributes.apply { screenBrightness = originalScreenBrightness }
                 WindowCompat.getInsetsController(it, view).show(WindowInsetsCompat.Type.systemBars())
             }
         }
@@ -146,21 +152,30 @@ fun ReaderScreen(
                 Crossfade(targetState = currentMode, label = "mode-transition") { mode ->
                     when (mode) {
                         ReadingMode.Text -> {
-                            ReadingView(
-                                sections = currentDoc.sections,
-                                initialBlockIndex = state.currentBlockIndex,
-                                initialScrollOffset = state.currentScrollOffset,
-                                prefs = prefs,
-                                onToggleOverlay = { overlayVisible = !overlayVisible },
-                                onScroll = { overlayVisible = false },
-                                onPositionChanged = viewModel::onPositionChanged,
-                                onWordSelected = viewModel::lookupWord
-                            )
+                            val publication = state.publication
+                            if (publication != null) {
+                                ReadiumPublicationView(
+                                    publication = publication,
+                                    format = currentBook.format,
+                                    initialLocator = state.initialLocator,
+                                    preferences = prefs,
+                                    onLocatorChanged = viewModel::onNavigatorLocatorChanged,
+                                    onContentTap = { overlayVisible = !overlayVisible },
+                                    isDictionarySelectionActive = viewModel::isDictionarySelectionActive,
+                                    onSelectedWord = viewModel::onSelectedWord,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    color = prefs.theme.controlsBackground
+                                )
+                            }
                             ReaderOverlay(
                                 isVisible = overlayVisible,
                                 prefs = prefs,
                                 bookTitle = currentBook.title,
-                                sectionTitle = currentSection?.title ?: "Reading",
+                                sectionTitle = state.navigatorChapterTitle ?: currentSection?.title ?: "Reading",
                                 progressLabel = progressLabel,
                                 progression = state.progression,
                                 currentMode = currentMode,
@@ -183,23 +198,27 @@ fun ReaderScreen(
                                     }
                                 }
                             }
+                            val startSection = if (state.audioPositionInitialized) state.audioSectionIndex else state.currentSectionIndex
+                            val startParagraph = if (state.audioPositionInitialized) state.audioParagraphIndex else 0
                             val initialPassageIndex = passages.indexOfFirst { passage ->
-                                passage.sectionIndex == state.currentSectionIndex &&
-                                    passage.paragraphIndex == (state.currentBlockIndex - currentDoc.sections
-                                        .take(state.currentSectionIndex)
-                                        .sumOf { it.paragraphs.size + 1 } - 1)
-                            }.takeIf { it >= 0 } ?: passages.indexOfFirst { it.sectionIndex == state.currentSectionIndex }.coerceAtLeast(0)
+                                passage.sectionIndex == startSection && passage.paragraphIndex == startParagraph
+                            }.takeIf { it >= 0 } ?: passages.indexOfFirst { it.sectionIndex == startSection }.coerceAtLeast(0)
                             AudioPlayerView(
                                 bookTitle = currentBook.title,
                                 author = currentBook.authors.joinToString().ifBlank { "Unknown author" },
                                 coverUri = currentBook.coverUri,
+                                voiceName = prefs.audioVoiceName,
                                 passages = passages,
                                 initialPassageIndex = initialPassageIndex,
+                                initialCharOffset = if (state.audioPositionInitialized) state.audioCharOffset else 0,
+                                persistInitialPosition = !state.audioPositionInitialized,
                                 isBookmarked = isBookmarked,
                                 onBookmarkToggle = viewModel::toggleBookmark,
                                 onPassageChanged = { passage ->
                                     viewModel.onAudioParagraphChanged(passage.sectionIndex, passage.paragraphIndex)
                                 },
+                                onCharOffsetChanged = viewModel::onAudioCharOffsetChanged,
+                                onPlaybackFinished = viewModel::onAudioPlaybackFinished,
                                 onBackToText = {
                                     currentMode = ReadingMode.Text
                                     viewModel.onReadingModeChanged(SessionMode.TEXT)
@@ -217,6 +236,19 @@ fun ReaderScreen(
                         background = prefs.theme.background,
                         foreground = prefs.theme.text,
                         accent = prefs.theme.controlsBackground
+                    )
+                }
+
+                if (state.dictionarySelectionActive) {
+                    Text(
+                        text = "Select a word in the book",
+                        color = prefs.theme.controlsContent,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 76.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(prefs.theme.controlsBackground.copy(alpha = 0.94f))
+                            .padding(horizontal = 18.dp, vertical = 11.dp)
                     )
                 }
 

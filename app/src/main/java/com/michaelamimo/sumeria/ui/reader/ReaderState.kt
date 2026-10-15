@@ -48,7 +48,15 @@ enum class ReaderFont(val fontName: String, val family: FontFamily) {
     Serif("Serif", FontFamily.Serif),
     Sans("Sans", FontFamily(Font(R.font.reader_inter))),
     Mono("Mono", FontFamily(Font(R.font.reader_jetbrains_mono))),
-    Cursive("Cursive", FontFamily(Typeface.create("cursive", Typeface.NORMAL)))
+    Cursive("Cursive", FontFamily(Typeface.create("cursive", Typeface.NORMAL))),
+    Georgia("Georgia", FontFamily(Typeface.create("serif", Typeface.NORMAL))),
+    BookSerif("Book Serif", FontFamily(Typeface.create("serif", Typeface.NORMAL))),
+    Rounded("Rounded", FontFamily(Typeface.create("sans-serif-rounded", Typeface.NORMAL))),
+    Condensed("Condensed", FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL))),
+    OpenDyslexic("Open Dyslexic", FontFamily.SansSerif),
+    AccessibleDfa("Accessible DfA", FontFamily.SansSerif),
+    WriterDuospace("iA Writer Duospace", FontFamily.Monospace),
+    Fantasy("Fantasy", FontFamily.Cursive)
 }
 
 enum class ReadingMode { Text, Audio }
@@ -64,7 +72,9 @@ data class ReaderPreferences(
     val horizontalMargin: Int = 24,
     val readingStyle: ReadingStyle = ReadingStyle.Scroll,
     val textAlignment: TextAlignment = TextAlignment.Justified,
-    val isBookmarked: Boolean = false // Track bookmark state
+    val isBookmarked: Boolean = false, // Track bookmark state
+    val brightness: Float = -1f,
+    val audioVoiceName: String = ""
 )
 
 data class ReaderBookmark(

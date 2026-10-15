@@ -17,7 +17,7 @@ import com.michaelamimo.sumeria.data.local.entity.UserPreferencesEntity
 @Database(entities = [
     BookEntity::class, ReadingProgressEntity::class, ReadingSessionEntity::class,
     ReaderBookmarkEntity::class, UserPreferencesEntity::class
-], version = 4, exportSchema = true)
+], version = 8, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class SumeriaDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao

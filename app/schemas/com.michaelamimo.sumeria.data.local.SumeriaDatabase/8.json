@@ -1,0 +1,499 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 8,
+    "identityHash": "d09fba05b3385903835a8ded4afb5ac8",
+    "entities": [
+      {
+        "tableName": "books",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerUserId` TEXT NOT NULL DEFAULT 'local', `id` TEXT NOT NULL, `title` TEXT NOT NULL, `authorsJson` TEXT NOT NULL, `description` TEXT, `format` TEXT NOT NULL, `sourceUri` TEXT, `coverUri` TEXT, `genre` TEXT, `totalPages` INTEGER, `addedAtMillis` INTEGER NOT NULL, `lastOpenedAtMillis` INTEGER, `fileSizeBytes` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`ownerUserId`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'local'"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorsJson",
+            "columnName": "authorsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "format",
+            "columnName": "format",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceUri",
+            "columnName": "sourceUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "coverUri",
+            "columnName": "coverUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "genre",
+            "columnName": "genre",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "totalPages",
+            "columnName": "totalPages",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "addedAtMillis",
+            "columnName": "addedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastOpenedAtMillis",
+            "columnName": "lastOpenedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fileSizeBytes",
+            "columnName": "fileSizeBytes",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerUserId",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "reading_progress",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerUserId` TEXT NOT NULL, `bookId` TEXT NOT NULL, `locationJson` TEXT, `currentPage` INTEGER, `totalPages` INTEGER, `progression` REAL NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerUserId`, `bookId`), FOREIGN KEY(`ownerUserId`, `bookId`) REFERENCES `books`(`ownerUserId`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bookId",
+            "columnName": "bookId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationJson",
+            "columnName": "locationJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "currentPage",
+            "columnName": "currentPage",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "totalPages",
+            "columnName": "totalPages",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "progression",
+            "columnName": "progression",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerUserId",
+            "bookId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reading_progress_ownerUserId_bookId",
+            "unique": false,
+            "columnNames": [
+              "ownerUserId",
+              "bookId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reading_progress_ownerUserId_bookId` ON `${TABLE_NAME}` (`ownerUserId`, `bookId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "books",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "ownerUserId",
+              "bookId"
+            ],
+            "referencedColumns": [
+              "ownerUserId",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "reading_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerUserId` TEXT NOT NULL, `id` TEXT NOT NULL, `bookId` TEXT NOT NULL, `startedAtMillis` INTEGER NOT NULL, `endedAtMillis` INTEGER, `durationMillis` INTEGER NOT NULL, `pagesRead` INTEGER NOT NULL, `wordsRead` INTEGER NOT NULL, `mode` TEXT NOT NULL, PRIMARY KEY(`ownerUserId`, `id`), FOREIGN KEY(`ownerUserId`, `bookId`) REFERENCES `books`(`ownerUserId`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bookId",
+            "columnName": "bookId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAtMillis",
+            "columnName": "endedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "durationMillis",
+            "columnName": "durationMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pagesRead",
+            "columnName": "pagesRead",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wordsRead",
+            "columnName": "wordsRead",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mode",
+            "columnName": "mode",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerUserId",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reading_sessions_ownerUserId_bookId",
+            "unique": false,
+            "columnNames": [
+              "ownerUserId",
+              "bookId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reading_sessions_ownerUserId_bookId` ON `${TABLE_NAME}` (`ownerUserId`, `bookId`)"
+          },
+          {
+            "name": "index_reading_sessions_startedAtMillis",
+            "unique": false,
+            "columnNames": [
+              "startedAtMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reading_sessions_startedAtMillis` ON `${TABLE_NAME}` (`startedAtMillis`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "books",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "ownerUserId",
+              "bookId"
+            ],
+            "referencedColumns": [
+              "ownerUserId",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "reader_bookmarks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerUserId` TEXT NOT NULL, `id` TEXT NOT NULL, `bookId` TEXT NOT NULL, `locationJson` TEXT NOT NULL, `chapterTitle` TEXT, `excerpt` TEXT, `createdAtMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerUserId`, `id`), FOREIGN KEY(`ownerUserId`, `bookId`) REFERENCES `books`(`ownerUserId`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bookId",
+            "columnName": "bookId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationJson",
+            "columnName": "locationJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chapterTitle",
+            "columnName": "chapterTitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "excerpt",
+            "columnName": "excerpt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerUserId",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reader_bookmarks_ownerUserId_bookId",
+            "unique": false,
+            "columnNames": [
+              "ownerUserId",
+              "bookId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reader_bookmarks_ownerUserId_bookId` ON `${TABLE_NAME}` (`ownerUserId`, `bookId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "books",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "ownerUserId",
+              "bookId"
+            ],
+            "referencedColumns": [
+              "ownerUserId",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "user_preferences",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileId` TEXT NOT NULL, `dailyGoalMinutes` INTEGER NOT NULL, `yearlyBookGoal` INTEGER NOT NULL, `readerTheme` TEXT NOT NULL, `readerFont` TEXT NOT NULL, `readerFontSize` INTEGER NOT NULL, `readerLineSpacing` REAL NOT NULL, `readerHorizontalMargin` INTEGER NOT NULL, `readingStyle` TEXT NOT NULL, `textAlignment` TEXT NOT NULL, `appThemeMode` TEXT NOT NULL, `dailyRemindersEnabled` INTEGER NOT NULL, `reminderMinutesAfterMidnight` INTEGER, `updatedAtMillis` INTEGER NOT NULL DEFAULT 0, `autoCloudSyncEnabled` INTEGER NOT NULL DEFAULT 1, `readerBrightness` REAL NOT NULL DEFAULT -1.0, `libraryShelvesJson` TEXT NOT NULL DEFAULT '[]', `libraryMembershipJson` TEXT NOT NULL DEFAULT '{}', `librarySortOrder` TEXT NOT NULL DEFAULT 'DateAdded', `audioVoiceName` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`profileId`))",
+        "fields": [
+          {
+            "fieldPath": "profileId",
+            "columnName": "profileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dailyGoalMinutes",
+            "columnName": "dailyGoalMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "yearlyBookGoal",
+            "columnName": "yearlyBookGoal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readerTheme",
+            "columnName": "readerTheme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readerFont",
+            "columnName": "readerFont",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readerFontSize",
+            "columnName": "readerFontSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readerLineSpacing",
+            "columnName": "readerLineSpacing",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readerHorizontalMargin",
+            "columnName": "readerHorizontalMargin",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readingStyle",
+            "columnName": "readingStyle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "textAlignment",
+            "columnName": "textAlignment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appThemeMode",
+            "columnName": "appThemeMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dailyRemindersEnabled",
+            "columnName": "dailyRemindersEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderMinutesAfterMidnight",
+            "columnName": "reminderMinutesAfterMidnight",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "autoCloudSyncEnabled",
+            "columnName": "autoCloudSyncEnabled",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "readerBrightness",
+            "columnName": "readerBrightness",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "-1.0"
+          },
+          {
+            "fieldPath": "libraryShelvesJson",
+            "columnName": "libraryShelvesJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "libraryMembershipJson",
+            "columnName": "libraryMembershipJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'{}'"
+          },
+          {
+            "fieldPath": "librarySortOrder",
+            "columnName": "librarySortOrder",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'DateAdded'"
+          },
+          {
+            "fieldPath": "audioVoiceName",
+            "columnName": "audioVoiceName",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd09fba05b3385903835a8ded4afb5ac8')"
+    ]
+  }
+}

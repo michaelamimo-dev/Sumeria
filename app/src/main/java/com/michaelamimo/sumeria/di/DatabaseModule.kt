@@ -6,6 +6,10 @@ import com.michaelamimo.sumeria.data.local.SumeriaDatabase
 import com.michaelamimo.sumeria.data.local.MIGRATION_1_2
 import com.michaelamimo.sumeria.data.local.MIGRATION_2_3
 import com.michaelamimo.sumeria.data.local.MIGRATION_3_4
+import com.michaelamimo.sumeria.data.local.MIGRATION_4_5
+import com.michaelamimo.sumeria.data.local.MIGRATION_5_6
+import com.michaelamimo.sumeria.data.local.MIGRATION_6_7
+import com.michaelamimo.sumeria.data.local.MIGRATION_7_8
 import com.michaelamimo.sumeria.data.local.dao.BookDao
 import com.michaelamimo.sumeria.data.local.dao.ReaderBookmarkDao
 import com.michaelamimo.sumeria.data.local.dao.ReadingProgressDao
@@ -25,7 +29,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): SumeriaDatabase =
         Room.databaseBuilder(context, SumeriaDatabase::class.java, "sumeria.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
 
     @Provides fun provideBookDao(database: SumeriaDatabase): BookDao = database.bookDao()

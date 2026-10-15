@@ -132,7 +132,7 @@ fun ReadingView(
 
 @Composable
 private fun ReaderTextBlock(block: ReaderBlock, prefs: ReaderPreferences, onWordSelected: (String) -> Unit) {
-    if (block.isHeading) {
+    if (block.isHeading && block.text.isNotBlank()) {
         Text(
             text = block.text,
             fontFamily = prefs.font.family,

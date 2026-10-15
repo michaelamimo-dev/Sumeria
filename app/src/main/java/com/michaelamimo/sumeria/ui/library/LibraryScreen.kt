@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -111,6 +112,11 @@ fun LibraryScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showImportOptions by remember { mutableStateOf(false) }
+    var showNewShelf by remember { mutableStateOf(false) }
+    var newShelfName by remember { mutableStateOf("") }
+    var newShelfSummary by remember { mutableStateOf("") }
+    var newShelfTheme by remember { mutableStateOf("") }
+    var actionBook by remember { mutableStateOf<LibraryBook?>(null) }
 
     val openFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -135,25 +141,42 @@ fun LibraryScreen(
         }
     }
 
-    val importedBooks = remember(uiState.books) {
-        uiState.books.map { book ->
+    val sortedBooks = remember(uiState.books, uiState.sortOrder) {
+        when (uiState.sortOrder) {
+            LibrarySortOrder.Alphabetical -> uiState.books.sortedBy { it.title.lowercase() }
+            LibrarySortOrder.DateAdded -> uiState.books.sortedByDescending { it.addedAtMillis }
+            LibrarySortOrder.Author -> uiState.books.sortedBy { it.authors.firstOrNull()?.lowercase().orEmpty() }
+            LibrarySortOrder.FileSize -> uiState.books.sortedByDescending { it.fileSizeBytes ?: -1L }
+        }
+    }
+    val importedBooks = remember(sortedBooks) {
+        sortedBooks.map { book ->
             LibraryBook(
                 title = book.title,
                 author = book.authors.joinToString().ifBlank { "Unknown author" },
                 coverUrl = book.coverUri,
-                isCloud = false,
+                isCloud = Uri.parse(book.sourceUri).authority.orEmpty().let { provider ->
+                    provider.contains("dropbox", ignoreCase = true) ||
+                        provider.contains("drive", ignoreCase = true) ||
+                        provider.contains("docs", ignoreCase = true)
+                },
                 id = book.id
             )
         }
     }
-    val mockCollections = remember { MockLibraryRepository.getCollections() }
-    val collections = remember(importedBooks, mockCollections) {
-        mockCollections.map { collection ->
-            if (collection.title.equals("All", ignoreCase = true)) collection.copy(books = importedBooks)
-            else collection
+    val collections = remember(importedBooks, uiState.shelves, uiState.membership, uiState.completedBookIds) {
+        val readIds = uiState.completedBookIds
+        listOf(
+            LibraryCollection("All", importedBooks),
+            LibraryCollection("Read", importedBooks.filter { it.id in readIds }),
+            LibraryCollection("Favorites", importedBooks.filter { it.id in uiState.membership["Favorites"].orEmpty() }),
+            LibraryCollection("To Read", importedBooks.filter { it.id in uiState.membership["To Read"].orEmpty() })
+        ) + uiState.shelves.map { shelf ->
+            LibraryCollection(shelf.name, importedBooks.filter { it.id in uiState.membership[shelf.name].orEmpty() }, shelf.summary, shelf.theme)
         }
     }
     var selectedCollection by remember { mutableStateOf<LibraryCollection?>(null) }
+    val currentSelectedCollection = collections.firstOrNull { it.title == selectedCollection?.title }
     val view = LocalView.current
     val activity = remember(view) { view.context.findActivity() }
 
@@ -164,7 +187,7 @@ fun LibraryScreen(
         }
     }
 
-    BackHandler(enabled = selectedCollection != null) {
+    BackHandler(enabled = currentSelectedCollection != null) {
         selectedCollection = null
     }
 
@@ -189,19 +212,23 @@ fun LibraryScreen(
                     .windowInsetsTopHeight(WindowInsets.statusBars)
             )
 
-            Crossfade(targetState = selectedCollection, label = "library-content") { selected ->
+            Crossfade(targetState = currentSelectedCollection, label = "library-content") { selected ->
                 if (selected == null) {
                     CollectionsHome(
                         collections = collections,
                         isImporting = uiState.isImporting,
                         onAddBooks = { showImportOptions = true },
                         onBookClick = onBookClick,
-                        onCollectionClick = { selectedCollection = it }
+                        onCollectionClick = { selectedCollection = it },
+                        onNewShelfClick = { showNewShelf = true }
                     )
                 } else {
                     CollectionDetailView(
                         collection = selected,
                         onBookClick = onBookClick,
+                        onBookLongClick = { actionBook = it },
+                        sortOrder = uiState.sortOrder,
+                        onSortOrderChange = viewModel::setSortOrder,
                         onBackClick = { selectedCollection = null }
                     )
                 }
@@ -236,6 +263,58 @@ fun LibraryScreen(
                 }
             )
         }
+        if (showNewShelf) {
+            AlertDialog(
+                onDismissRequest = { showNewShelf = false },
+                containerColor = Paper,
+                title = { Text("Create a shelf", color = Ink, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        androidx.compose.material3.OutlinedTextField(newShelfName, { newShelfName = it }, label = { Text("Shelf name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        androidx.compose.material3.OutlinedTextField(newShelfSummary, { newShelfSummary = it }, label = { Text("What is this shelf about?") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                        androidx.compose.material3.OutlinedTextField(newShelfTheme, { value -> newShelfTheme = value.trim().split(Regex("\\s+")).take(3).joinToString(" ") }, label = { Text("Theme · up to 3 words") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = newShelfName.isNotBlank() && newShelfTheme.isNotBlank(),
+                        onClick = {
+                            viewModel.createShelf(newShelfName, newShelfSummary, newShelfTheme)
+                            newShelfName = ""; newShelfSummary = ""; newShelfTheme = ""; showNewShelf = false
+                        }
+                    ) { Text("Create", color = Ink) }
+                },
+                dismissButton = { TextButton(onClick = { showNewShelf = false }) { Text("Cancel", color = Sage) } }
+            )
+        }
+        actionBook?.let { selectedBook ->
+            val targets = listOf("Favorites", "To Read") + uiState.shelves.map { it.name }
+            AlertDialog(
+                onDismissRequest = { actionBook = null },
+                containerColor = Paper,
+                title = { Text(selectedBook.title, color = Ink, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Add to a collection", color = Sage)
+                        targets.forEach { target ->
+                            TextButton(onClick = {
+                                selectedBook.id?.let { viewModel.toggleMembership(it, target) }
+                                actionBook = null
+                            }) {
+                                Text(if (selectedBook.id in uiState.membership[target].orEmpty()) "Remove from $target" else "Add to $target", color = Ink)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        selectedBook.id?.let(viewModel::removeBook)
+                        actionBook = null
+                    }) { Text("Delete book", color = Color(0xFFB42318)) }
+                },
+                dismissButton = { TextButton(onClick = { actionBook = null }) { Text("Done", color = Sage) } }
+            )
+        }
     }
 }
 
@@ -249,7 +328,8 @@ private fun CollectionsHome(
     isImporting: Boolean,
     onAddBooks: () -> Unit,
     onBookClick: (String) -> Unit,
-    onCollectionClick: (LibraryCollection) -> Unit
+    onCollectionClick: (LibraryCollection) -> Unit,
+    onNewShelfClick: () -> Unit
 ) {
     val allCollection = collections.firstOrNull { it.title.equals("All", ignoreCase = true) }
     val shelves = collections.filterNot { it.title.equals("All", ignoreCase = true) }
@@ -303,7 +383,7 @@ private fun CollectionsHome(
                     } else {
                         NewShelfTile(
                             modifier = Modifier.weight(1f),
-                            onClick = { /* Show the create shelf action. */ }
+                            onClick = onNewShelfClick
                         )
                     }
                 }
@@ -675,7 +755,7 @@ private fun CollectionTile(
 
                 Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.6f)) {
                     Text(
-                        text = collection.books.size.toString().padStart(2, '0'),
+                        text = collection.books.size.toString(),
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold
                         ),
@@ -688,7 +768,7 @@ private fun CollectionTile(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                text = collectionSubtitle(collection.title).uppercase(),
+                text = collection.theme.ifBlank { collectionSubtitle(collection.title) }.uppercase(),
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.9.sp
@@ -709,7 +789,7 @@ private fun CollectionTile(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = collectionBlurb(collection.title),
+                text = collection.summary.ifBlank { collectionBlurb(collection.title) },
                 style = MaterialTheme.typography.bodySmall,
                 color = Ink.copy(alpha = 0.68f),
                 maxLines = 2,
@@ -884,26 +964,34 @@ private enum class ShelfFilter(val label: String) {
 private fun CollectionDetailView(
     collection: LibraryCollection,
     onBookClick: (String) -> Unit,
+    onBookLongClick: (LibraryBook) -> Unit,
+    sortOrder: LibrarySortOrder,
+    onSortOrderChange: (LibrarySortOrder) -> Unit,
     onBackClick: () -> Unit
 ) {
     var filter by remember(collection) { mutableStateOf(ShelfFilter.All) }
     var shelfQuery by remember(collection) { mutableStateOf("") }
+    var showSortDialog by remember { mutableStateOf(false) }
 
     val totalCount = collection.books.size
-    val cloudCount = remember(collection) { collection.books.count { it.isCloud } }
-    val deviceCount = totalCount - cloudCount
+    val cloudCount = 0
+    val deviceCount = totalCount
 
-    val visibleBooks = remember(collection, filter, shelfQuery) {
+    val visibleBooks = remember(collection, filter, shelfQuery, sortOrder) {
         val byFilter = when (filter) {
             ShelfFilter.All -> collection.books
             ShelfFilter.OnDevice -> collection.books.filterNot { it.isCloud }
             ShelfFilter.Cloud -> collection.books.filter { it.isCloud }
         }
         val q = shelfQuery.trim()
-        if (q.isEmpty()) byFilter
-        else byFilter.filter {
+        val searched = if (q.isEmpty()) byFilter else byFilter.filter {
             it.title.contains(q, ignoreCase = true) ||
                     it.author.contains(q, ignoreCase = true)
+        }
+        when (sortOrder) {
+            LibrarySortOrder.Alphabetical -> searched.sortedBy { it.title.lowercase() }
+            LibrarySortOrder.FileSize, LibrarySortOrder.DateAdded -> searched
+            LibrarySortOrder.Author -> searched.sortedBy { it.author.lowercase() }
         }
     }
     val tint = collectionColor(collection.title)
@@ -918,9 +1006,9 @@ private fun CollectionDetailView(
             ShelfHeader(
                 collection = collection,
                 tint = tint,
-                cloudCount = cloudCount,
                 query = shelfQuery,
                 onQueryChange = { shelfQuery = it },
+                onSortClick = { showSortDialog = true },
                 onBackClick = onBackClick
             )
         }
@@ -941,7 +1029,7 @@ private fun CollectionDetailView(
                         count = when (option) {
                             ShelfFilter.All -> totalCount
                             ShelfFilter.OnDevice -> deviceCount
-                            ShelfFilter.Cloud -> cloudCount
+                            ShelfFilter.Cloud -> 0
                         },
                         selected = filter == option,
                         onClick = { filter = option }
@@ -979,12 +1067,32 @@ private fun CollectionDetailView(
                     BookShelfRow(
                         books = row,
                         shelfColor = shelfColors[rowIndex % shelfColors.size],
-                        onBookClick = onBookClick
+                        onBookClick = onBookClick,
+                        onBookLongClick = onBookLongClick
                     )
                 }
                 Spacer(Modifier.height(28.dp))
             }
         }
+    }
+
+    if (showSortDialog) {
+        AlertDialog(
+            onDismissRequest = { showSortDialog = false },
+            containerColor = Paper,
+            title = { Text("Arrange books", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    LibrarySortOrder.entries.forEach { option ->
+                        TextButton(onClick = {
+                            onSortOrderChange(option)
+                            showSortDialog = false
+                        }) { Text(if (sortOrder == option) "✓  ${option.label}" else option.label, color = Ink) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSortDialog = false }) { Text("Done", color = Sage) } }
+        )
     }
 }
 
@@ -996,9 +1104,9 @@ private fun CollectionDetailView(
 private fun ShelfHeader(
     collection: LibraryCollection,
     tint: Color,
-    cloudCount: Int,
     query: String,
     onQueryChange: (String) -> Unit,
+    onSortClick: () -> Unit,
     onBackClick: () -> Unit
 ) {
     val overlap = 28.dp
@@ -1100,7 +1208,7 @@ private fun ShelfHeader(
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = collectionBlurb(collection.title),
+                            text = collection.summary.ifBlank { collectionBlurb(collection.title) },
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink.copy(alpha = 0.7f),
                             maxLines = 2,
@@ -1109,9 +1217,6 @@ private fun ShelfHeader(
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             StatPill("${collection.books.size} books")
-                            if (cloudCount > 0) {
-                                StatPill("$cloudCount in cloud")
-                            }
                         }
                     }
 
@@ -1143,7 +1248,7 @@ private fun ShelfHeader(
                 "Search all books"
             else
                 "Search in ${collection.title}",
-            onSortClick = { /* Sorting options will be added in a later phase. */ },
+            onSortClick = onSortClick,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = SIDE.dp)
@@ -1347,7 +1452,8 @@ private fun LibraryChip(
 fun BookShelfRow(
     books: List<LibraryBook>,
     shelfColor: Color,
-    onBookClick: (String) -> Unit = {}
+    onBookClick: (String) -> Unit = {},
+    onBookLongClick: (LibraryBook) -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // Covers resting on the plank
@@ -1370,7 +1476,7 @@ fun BookShelfRow(
             ) {
                 for (index in 0..2) {
                     if (index < books.size) {
-                        BookCover(book = books[index], modifier = Modifier.weight(1f), onBookClick = onBookClick)
+                        BookCover(book = books[index], modifier = Modifier.weight(1f), onBookClick = onBookClick, onBookLongClick = onBookLongClick)
                     } else {
                         Spacer(Modifier.weight(1f))
                     }
@@ -1404,7 +1510,8 @@ fun BookShelfRow(
 private fun BookCover(
     book: LibraryBook,
     modifier: Modifier = Modifier,
-    onBookClick: (String) -> Unit
+    onBookClick: (String) -> Unit,
+    onBookLongClick: (LibraryBook) -> Unit = {}
 ) {
     Box(
         modifier = modifier
@@ -1413,7 +1520,7 @@ private fun BookCover(
             .clip(RoundedCornerShape(8.dp))
             .combinedClickable(
                 onClick = { book.id?.let(onBookClick) },
-                onLongClick = { /* Show book actions. */ }
+                onLongClick = { onBookLongClick(book) }
             )
     ) {
         AsyncImage(
@@ -1607,12 +1714,14 @@ private fun Context.findActivity(): Activity? {
 }
 
 // ==========================================
-// MOCK DATA & MODELS
+// Screen models
 // ==========================================
 
 data class LibraryCollection(
     val title: String,
-    val books: List<LibraryBook>
+    val books: List<LibraryBook>,
+    val summary: String = "",
+    val theme: String = ""
 )
 
 data class LibraryBook(
@@ -1622,33 +1731,3 @@ data class LibraryBook(
     val isCloud: Boolean = false,
     val id: String? = null
 )
-
-object MockLibraryRepository {
-    private val sampleCovers = listOf(
-        "https://m.media-amazon.com/images/I/81bsw6fnUiL._AC_UF1000,1000_QL80_.jpg", // Atomic Habits
-        "https://m.media-amazon.com/images/I/71QKQ9mwV7L._AC_UF1000,1000_QL80_.jpg", // Subtle Art
-        "https://m.media-amazon.com/images/I/71aG+xDKSYL._AC_UF1000,1000_QL80_.jpg", // 48 Laws
-        "https://m.media-amazon.com/images/I/81ZGKEZW0RL._AC_UF1000,1000_QL80_.jpg", // Sapiens
-        "https://m.media-amazon.com/images/I/71yNgTMEcpL._AC_UF1000,1000_QL80_.jpg"  // Think and Grow Rich
-    )
-
-    fun getCollections(): List<LibraryCollection> {
-        val allBooks = List(15) {
-            LibraryBook(
-                title = "Sample Book $it",
-                author = "Author $it",
-                coverUrl = sampleCovers[it % sampleCovers.size],
-                isCloud = it % 3 == 0 // Every 3rd book is in the cloud
-            )
-        }
-
-        return listOf(
-            LibraryCollection("All", allBooks),
-            LibraryCollection("Read", allBooks.take(4)),
-            LibraryCollection("Favorites", allBooks.shuffled().take(6)),
-            LibraryCollection("To Read", allBooks.takeLast(5)),
-            LibraryCollection("Design", allBooks.shuffled().take(3)),
-            LibraryCollection("Psychology", allBooks.shuffled().take(7))
-        )
-    }
-}

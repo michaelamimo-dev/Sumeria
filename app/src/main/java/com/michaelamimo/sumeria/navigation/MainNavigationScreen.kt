@@ -89,7 +89,9 @@ fun MainNavigationScreen(onSignedOut: () -> Unit) {
             )
         ) {
             composable(Screen.Home.route) {
-                HomeScreen()
+                HomeScreen(onBookClick = { bookId ->
+                    bottomNavController.navigate(Screen.Reader.forBook(bookId))
+                })
             }
 
             composable(Screen.Library.route) {

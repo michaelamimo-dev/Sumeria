@@ -53,11 +53,16 @@ fun AudioPlayerView(
     bookTitle: String,
     author: String,
     coverUri: String?,
+    voiceName: String,
     passages: List<AudioPassage>,
     initialPassageIndex: Int,
+    initialCharOffset: Int,
+    persistInitialPosition: Boolean,
     isBookmarked: Boolean,
     onBookmarkToggle: () -> Unit,
     onPassageChanged: (AudioPassage) -> Unit,
+    onCharOffsetChanged: (Int) -> Unit,
+    onPlaybackFinished: () -> Unit,
     onBackToText: () -> Unit
 ) {
     val context = LocalContext.current
@@ -71,6 +76,8 @@ fun AudioPlayerView(
     var passageIndex by remember(passages) {
         mutableIntStateOf(initialPassageIndex.coerceIn(0, (passages.lastIndex).coerceAtLeast(0)))
     }
+    var charOffset by remember(passages) { mutableIntStateOf(initialCharOffset.coerceAtLeast(0)) }
+    var activeUtteranceBaseOffset by remember { mutableIntStateOf(0) }
     var progress by remember(passages) {
         mutableFloatStateOf(if (passages.size <= 1) 0f else passageIndex.toFloat() / passages.lastIndex)
     }
@@ -84,11 +91,14 @@ fun AudioPlayerView(
     val latestIsPlaying by rememberUpdatedState(isPlaying)
     val latestPassageIndex by rememberUpdatedState(passageIndex)
     val latestPassageCount by rememberUpdatedState(passages.size)
+    val latestCharOffsetChanged by rememberUpdatedState(onCharOffsetChanged)
     val latestMoveTo by rememberUpdatedState<(Int) -> Unit> { index ->
         val bounded = index.coerceIn(0, (passages.lastIndex).coerceAtLeast(0))
         passageIndex = bounded
+        charOffset = 0
         progress = if (passages.size <= 1) 0f else bounded.toFloat() / passages.lastIndex
         passages.getOrNull(bounded)?.let(onPassageChanged)
+        latestCharOffsetChanged(0)
     }
     val latestStop by rememberUpdatedState<() -> Unit> { isPlaying = false }
     DisposableEffect(lifecycleOwner) {
@@ -109,12 +119,23 @@ fun AudioPlayerView(
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
 
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                val offset = (activeUtteranceBaseOffset + start).coerceAtLeast(0)
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    charOffset = offset
+                    latestCharOffsetChanged(offset)
+                }
+            }
+
             override fun onDone(utteranceId: String?) {
                 if (utteranceId == null || !activeUtteranceId.compareAndSet(utteranceId, null)) return
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     if (!latestIsPlaying) return@post
                     val next = latestPassageIndex + 1
-                    if (next < latestPassageCount) latestMoveTo(next) else latestStop()
+                    if (next < latestPassageCount) latestMoveTo(next) else {
+                        latestStop()
+                        onPlaybackFinished()
+                    }
                 }
             }
 
@@ -142,16 +163,25 @@ fun AudioPlayerView(
         }
     }
 
-    LaunchedEffect(isPlaying, passageIndex, ttsReady, speed, passages) {
+    LaunchedEffect(passages, initialPassageIndex, persistInitialPosition) {
+        if (persistInitialPosition) passages.getOrNull(initialPassageIndex)?.let(onPassageChanged)
+    }
+
+    LaunchedEffect(isPlaying, passageIndex, ttsReady, speed, passages, voiceName) {
         if (!isPlaying) {
             activeUtteranceId.set(null)
             tts.stop()
         } else if (ttsReady) {
-            val text = passages.getOrNull(passageIndex)?.text.orEmpty()
+            val fullText = passages.getOrNull(passageIndex)?.text.orEmpty()
+            val text = fullText.drop(charOffset.coerceIn(0, fullText.length))
             if (text.isBlank()) {
                 if (passageIndex < passages.lastIndex) latestMoveTo(passageIndex + 1) else isPlaying = false
             } else {
                 ttsError = null
+                if (voiceName.isNotBlank()) {
+                    tts.voices.firstOrNull { it.name == voiceName }?.let { voice -> runCatching { tts.voice = voice } }
+                }
+                activeUtteranceBaseOffset = charOffset
                 tts.setSpeechRate(speed)
                 val utteranceId = "${passageIndex}-${System.nanoTime()}"
                 activeUtteranceId.set(utteranceId)

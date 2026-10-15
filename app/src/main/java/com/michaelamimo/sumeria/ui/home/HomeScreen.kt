@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -54,6 +55,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.michaelamimo.sumeria.domain.model.LibraryBook
+import com.michaelamimo.sumeria.domain.model.ReadingSession
 import coil.compose.AsyncImage
 import com.michaelamimo.sumeria.R
 import com.michaelamimo.sumeria.ui.theme.SumeriaTurtleLogo
@@ -74,13 +79,33 @@ private val RecentSectionSurface = Color(0xFFF5F1E7)
 private val GoalsSectionSurface = Color(0xFFFFF5E5)
 
 @Composable
-fun HomeScreen() {
-    val todayGoal = remember { MockHomeRepository.getTodayGoal() }
-    val weeklyProgress = remember { MockHomeRepository.getWeeklyProgress() }
-    val recentBooks = remember { MockHomeRepository.getRecentlyReadBooks() }
+fun HomeScreen(onBookClick: (String) -> Unit = {}, viewModel: HomeViewModel = hiltViewModel()) {
+    val data by viewModel.state.collectAsStateWithLifecycle()
+    val progressByBook = remember(data.progress) { data.progress.associateBy { it.bookId } }
+    val recentBooks = remember(data.books, data.progress) {
+        data.books.filter { it.lastOpenedAtMillis != null }
+            .sortedByDescending { it.lastOpenedAtMillis }
+            .take(10)
+            .map { it.toHomeBook(progressByBook[it.id]) }
+    }
+    val today = java.time.LocalDate.now()
+    val todayMinutes = data.sessions.filter { it.startedAtLocalDate() == today }
+        .sumOf { it.durationMillis }.div(60_000L).toInt()
+    val todayGoal = ReadingGoal(data.dailyGoalMinutes, todayMinutes)
+    val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+    val weeklyProgress = (0..6).map { offset ->
+        val date = weekStart.plusDays(offset.toLong())
+        val minutes = data.sessions.filter { it.startedAtLocalDate() == date }
+            .sumOf { it.durationMillis }.div(60_000L).toInt()
+        DailyProgress(date, date.dayOfWeek.name.take(1), minutes, data.dailyGoalMinutes)
+    }
+    val readDates = data.sessions.filter { it.durationMillis >= 60_000L }
+        .map { it.startedAtLocalDate() }.toSet()
+    val streak = (0..1).map { today.minusDays(it.toLong()) }.firstOrNull { it in readDates }
+        ?.let { anchor -> generateSequence(anchor) { it.minusDays(1) }.takeWhile { it in readDates }.count() } ?: 0
 
     val featuredBook = recentBooks.firstOrNull()
-    val otherRecentBooks = recentBooks.drop(1)
+    val otherRecentBooks = recentBooks
 
     val view = LocalView.current
     val activity = remember(view) { view.context.findActivity() }
@@ -113,23 +138,23 @@ fun HomeScreen() {
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(Modifier.height(20.dp))
-            HeaderSection(userName = "Michael")
+            HeaderSection(userName = "Reader")
             Spacer(Modifier.height(28.dp))
 
             if (featuredBook != null) {
-                ContinueReadingHeroSection(book = featuredBook)
+                ContinueReadingHeroSection(book = featuredBook, onBookClick = onBookClick)
                 Spacer(Modifier.height(30.dp))
             }
 
             if (otherRecentBooks.isNotEmpty()) {
-                RecentlyReadSection(books = otherRecentBooks)
+                RecentlyReadSection(books = otherRecentBooks, onBookClick = onBookClick)
                 Spacer(Modifier.height(30.dp))
             }
 
             ReadingGoalCardSection(
                 goal = todayGoal,
                 weeklyProgress = weeklyProgress,
-                streakDays = 7
+                streakDays = streak
             )
 
             Spacer(Modifier.height(34.dp))
@@ -232,13 +257,13 @@ fun HeaderSection(userName: String) {
 }
 
 @Composable
-fun ContinueReadingHeroSection(book: Book) {
+fun ContinueReadingHeroSection(book: Book, onBookClick: (String) -> Unit = {}) {
     Column(modifier = Modifier.padding(horizontal = 24.dp)) {
         SectionEyebrow(text = "YOUR CURRENT CHAPTER")
         Spacer(Modifier.height(12.dp))
 
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().clickable { onBookClick(book.id) },
             shape = RoundedCornerShape(26.dp),
             color = Cream,
             border = BorderStroke(1.dp, Amber.copy(alpha = 0.22f))
@@ -360,7 +385,7 @@ fun ContinueReadingHeroSection(book: Book) {
 }
 
 @Composable
-fun RecentlyReadSection(books: List<Book>) {
+fun RecentlyReadSection(books: List<Book>, onBookClick: (String) -> Unit = {}) {
     val cardColors = listOf(Coral, Lavender, Sky, GoalMetGreen)
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -443,7 +468,7 @@ fun RecentlyReadSection(books: List<Book>) {
                     Surface(
                         modifier = Modifier
                             .width(252.dp)
-                            .clickable { /* Connect to the book details action. */ },
+                            .clickable { onBookClick(book.id) },
                         shape = RoundedCornerShape(22.dp),
                         color = cardColor
                     ) {
@@ -724,14 +749,14 @@ fun ReadingGoalCardSection(
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         GoalHighlight(
                             emoji = "🔥",
-                            value = "$streakDays",
-                            label = "day streak",
+                            value = if (streakDays == 0) "Start today" else "$streakDays",
+                            label = if (streakDays == 0) "no current streak" else "day streak",
                             modifier = Modifier.weight(1f)
                         )
                         GoalHighlight(
                             emoji = "📚",
-                            value = "$daysRead",
-                            label = "days read this week",
+                            value = if (daysRead == 0) "0" else "$daysRead",
+                            label = if (daysRead == 0) "days read this week" else "days read this week",
                             modifier = Modifier.weight(1f)
                         )
                     }

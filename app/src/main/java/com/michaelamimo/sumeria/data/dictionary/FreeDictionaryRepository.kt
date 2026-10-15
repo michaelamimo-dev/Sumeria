@@ -89,8 +89,8 @@ class FreeDictionaryRepository @Inject constructor() : DictionaryRepository {
     private fun JSONArray?.orEmptyLength(): Int = this?.length() ?: 0
 
     private companion object {
-        const val CONNECT_TIMEOUT_MS = 5_000
-        const val READ_TIMEOUT_MS = 7_000
+        const val CONNECT_TIMEOUT_MS = 10_000
+        const val READ_TIMEOUT_MS = 15_000
         const val MAX_DEFINITIONS = 8
     }
 }

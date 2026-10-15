@@ -16,7 +16,8 @@ import com.michaelamimo.sumeria.domain.model.UserPreferences
 import com.michaelamimo.sumeria.domain.repository.LibraryBookRepository
 import com.michaelamimo.sumeria.domain.repository.DictionaryRepository
 import com.michaelamimo.sumeria.domain.repository.ReaderBookmarkRepository
-import com.michaelamimo.sumeria.domain.repository.ReaderContentRepository
+import com.michaelamimo.sumeria.data.reader.OpenReadiumPublication
+import com.michaelamimo.sumeria.data.reader.PublicationReaderContentRepository
 import com.michaelamimo.sumeria.domain.repository.ReadingProgressRepository
 import com.michaelamimo.sumeria.domain.repository.ReadingSessionRepository
 import com.michaelamimo.sumeria.domain.repository.UserPreferencesRepository
@@ -29,24 +30,35 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.readium.r2.shared.publication.Locator
 import java.util.UUID
 import javax.inject.Inject
 
 data class ReaderUiState(
     val book: LibraryBook? = null,
     val document: ReaderDocument? = null,
+    val publication: org.readium.r2.shared.publication.Publication? = null,
+    val initialLocator: Locator? = null,
+    val readiumLocatorJson: String? = null,
+    val navigatorChapterTitle: String? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
     val preferences: ReaderPreferences = ReaderPreferences(),
     val bookmarks: List<SavedReaderBookmark> = emptyList(),
     val dictionary: DictionaryLookupState? = null,
+    val dictionarySelectionActive: Boolean = false,
     val currentBlockIndex: Int = 0,
     val currentSectionIndex: Int = 0,
     val currentScrollOffset: Int = 0,
+    val audioSectionIndex: Int = 0,
+    val audioParagraphIndex: Int = 0,
+    val audioCharOffset: Int = 0,
+    val audioPositionInitialized: Boolean = false,
     val progression: Float = 0f
 )
 
@@ -61,7 +73,7 @@ data class DictionaryLookupState(
 class ReaderViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val bookRepository: LibraryBookRepository,
-    private val contentRepository: ReaderContentRepository,
+    private val contentRepository: PublicationReaderContentRepository,
     private val dictionaryRepository: DictionaryRepository,
     private val progressRepository: ReadingProgressRepository,
     private val sessionRepository: ReadingSessionRepository,
@@ -75,6 +87,7 @@ class ReaderViewModel @Inject constructor(
     private var progressSaveJob: Job? = null
     private var sessionTimerJob: Job? = null
     private var activeSession: ActiveSession? = null
+    private var openedPublication: OpenReadiumPublication? = null
     private var currentSessionMode: SessionMode = SessionMode.TEXT
     private var dictionaryLookupJob: Job? = null
     private var wordCountPrefix: IntArray = intArrayOf(0)
@@ -96,11 +109,16 @@ class ReaderViewModel @Inject constructor(
                 _uiState.update { it.copy(preferences = preferences.toReaderPreferences()) }
             }
         }
-        if (bookId == null) {
-            _uiState.update { it.copy(isLoading = false, error = "Choose a book from your library to start reading.") }
-        } else {
-            observeBookmarks(bookId)
-            loadBook(bookId)
+        viewModelScope.launch {
+            val targetBookId = bookId ?: bookRepository.observeAll().first()
+                .firstOrNull { it.lastOpenedAtMillis != null }?.id
+                ?: bookRepository.observeAll().first().firstOrNull()?.id
+            if (targetBookId == null) {
+                _uiState.update { it.copy(isLoading = false, error = "Your library is empty. Add a book to start reading.") }
+            } else {
+                observeBookmarks(targetBookId)
+                loadBook(targetBookId)
+            }
         }
     }
 
@@ -113,7 +131,9 @@ class ReaderViewModel @Inject constructor(
             readerLineSpacing = preferences.lineSpacing,
             readerHorizontalMargin = preferences.horizontalMargin,
             readingStyle = preferences.readingStyle.name,
-            textAlignment = preferences.textAlignment.name
+            textAlignment = preferences.textAlignment.name,
+            readerBrightness = preferences.brightness,
+            audioVoiceName = preferences.audioVoiceName
         )
         userPreferences = updated
         viewModelScope.launch { preferencesRepository.save(updated) }
@@ -141,11 +161,35 @@ class ReaderViewModel @Inject constructor(
         scheduleProgressSave()
     }
 
+    fun onNavigatorLocatorChanged(locator: Locator) {
+        val state = _uiState.value
+        val document = state.document
+        val sectionIndex = if (state.book?.format == BookFormat.PDF) {
+            locator.locations.position?.toInt()?.minus(1)?.coerceAtLeast(0)
+        } else {
+            locator.title?.let { title -> document?.sections?.indexOfFirst { it.title == title } }
+                ?.takeIf { it >= 0 }
+        }
+        val totalProgression = locator.locations.totalProgression?.toFloat()
+            ?: locator.locations.progression?.toFloat()
+            ?: state.progression
+        _uiState.update {
+            it.copy(
+                currentSectionIndex = sectionIndex ?: it.currentSectionIndex,
+                progression = totalProgression.coerceIn(0f, 1f),
+                readiumLocatorJson = locator.toJSON().toString(),
+                navigatorChapterTitle = locator.title
+            )
+        }
+        scheduleProgressSave()
+    }
+
     fun toggleBookmark() {
         val state = _uiState.value
         val book = state.book ?: return
-        val section = state.document?.sections?.getOrNull(state.currentSectionIndex) ?: return
-        val location = bookmarkLocationJson(state.currentBlockIndex, state.currentSectionIndex)
+        val section = state.document?.sections?.getOrNull(state.currentSectionIndex)
+        val location = if (currentSessionMode == SessionMode.AUDIO) audioBookmarkLocationJson(state) else
+            state.readiumLocatorJson ?: bookmarkLocationJson(state.currentBlockIndex, state.currentSectionIndex)
         val existing = state.bookmarks.firstOrNull { it.locationJson == location }
         viewModelScope.launch {
             if (existing != null) {
@@ -156,8 +200,8 @@ class ReaderViewModel @Inject constructor(
                         id = UUID.randomUUID().toString(),
                         bookId = book.id,
                         locationJson = location,
-                        chapterTitle = section.title,
-                        excerpt = section.paragraphs.firstOrNull(),
+                        chapterTitle = state.navigatorChapterTitle ?: section?.title,
+                        excerpt = section?.paragraphs?.firstOrNull(),
                         createdAtMillis = System.currentTimeMillis()
                     )
                 )
@@ -167,7 +211,8 @@ class ReaderViewModel @Inject constructor(
 
     fun isCurrentPositionBookmarked(): Boolean {
         val state = _uiState.value
-        val location = bookmarkLocationJson(state.currentBlockIndex, state.currentSectionIndex)
+        val location = if (currentSessionMode == SessionMode.AUDIO) audioBookmarkLocationJson(state) else
+            state.readiumLocatorJson ?: bookmarkLocationJson(state.currentBlockIndex, state.currentSectionIndex)
         return state.bookmarks.any { it.locationJson == location }
     }
 
@@ -181,7 +226,19 @@ class ReaderViewModel @Inject constructor(
 
     fun showDictionary() {
         dictionaryLookupJob?.cancel()
-        _uiState.update { it.copy(dictionary = DictionaryLookupState()) }
+        _uiState.update { it.copy(dictionary = null, dictionarySelectionActive = true) }
+    }
+
+    fun isDictionarySelectionActive(): Boolean = _uiState.value.dictionarySelectionActive
+
+    fun onSelectedWord(word: String?) {
+        val normalized = word.orEmpty().trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+        if (normalized.isBlank()) {
+            _uiState.update { it.copy(dictionarySelectionActive = false, dictionary = DictionaryLookupState(error = "Select a word in the book first.")) }
+        } else {
+            _uiState.update { it.copy(dictionarySelectionActive = false) }
+            lookupWord(normalized)
+        }
     }
 
     fun lookupWord(word: String) {
@@ -191,7 +248,7 @@ class ReaderViewModel @Inject constructor(
             return
         }
         dictionaryLookupJob?.cancel()
-        _uiState.update { it.copy(dictionary = DictionaryLookupState(word = normalized, isLoading = true)) }
+        _uiState.update { it.copy(dictionarySelectionActive = false, dictionary = DictionaryLookupState(word = normalized, isLoading = true)) }
         dictionaryLookupJob = viewModelScope.launch {
             try {
                 val definition = dictionaryRepository.lookup(normalized)
@@ -209,7 +266,7 @@ class ReaderViewModel @Inject constructor(
     fun dismissDictionary() {
         dictionaryLookupJob?.cancel()
         dictionaryLookupJob = null
-        _uiState.update { it.copy(dictionary = null) }
+        _uiState.update { it.copy(dictionary = null, dictionarySelectionActive = false) }
     }
 
     fun onAudioParagraphChanged(sectionIndex: Int, paragraphIndex: Int) {
@@ -218,7 +275,31 @@ class ReaderViewModel @Inject constructor(
         if (section.paragraphs.isEmpty()) return
         val blockIndex = sections.take(sectionIndex).sumOf { it.paragraphs.size + 1 } + 1 +
             paragraphIndex.coerceIn(0, section.paragraphs.lastIndex)
-        onPositionChanged(blockIndex, sectionIndex, 0)
+        val completedParagraphs = sections.take(sectionIndex).sumOf { it.paragraphs.size } + paragraphIndex.coerceIn(0, section.paragraphs.lastIndex)
+        val totalParagraphs = sections.sumOf { it.paragraphs.size }.coerceAtLeast(1)
+        _uiState.update {
+            it.copy(
+                currentBlockIndex = blockIndex,
+                currentSectionIndex = sectionIndex,
+                currentScrollOffset = 0,
+                progression = (completedParagraphs.toFloat() / totalParagraphs).coerceIn(0f, 1f),
+                audioSectionIndex = sectionIndex,
+                audioParagraphIndex = paragraphIndex,
+                audioCharOffset = 0,
+                audioPositionInitialized = true
+            )
+        }
+        scheduleProgressSave()
+    }
+
+    fun onAudioCharOffsetChanged(charOffset: Int) {
+        _uiState.update { it.copy(audioCharOffset = charOffset.coerceAtLeast(0), audioPositionInitialized = true) }
+        scheduleProgressSave()
+    }
+
+    fun onAudioPlaybackFinished() {
+        _uiState.update { it.copy(progression = 1f) }
+        scheduleProgressSave()
     }
 
     fun onReadingModeChanged(mode: SessionMode) {
@@ -338,17 +419,36 @@ class ReaderViewModel @Inject constructor(
                     return@launch
                 }
                 val progress = progressRepository.get(bookId)
+                val savedLocator = progress?.locationJson?.let { json ->
+                    runCatching {
+                        JSONObject(json).apply {
+                            remove("audioSectionIndex")
+                            remove("audioParagraphIndex")
+                            remove("audioCharOffset")
+                        }.let(Locator::fromJSON)
+                    }.getOrNull()
+                }
                 val location = progress?.locationJson?.let(::parseLocation)
+                val savedLocation = progress?.locationJson?.let { runCatching { JSONObject(it) }.getOrNull() }
                 _uiState.update {
                     it.copy(
                         book = book,
+                        initialLocator = savedLocator,
+                        readiumLocatorJson = savedLocator?.toJSON()?.toString(),
                         currentBlockIndex = location?.first ?: 0,
                         currentSectionIndex = location?.second ?: 0,
                         currentScrollOffset = location?.third ?: 0,
+                        audioSectionIndex = savedLocation?.optInt("audioSectionIndex", location?.second ?: 0) ?: (location?.second ?: 0),
+                        audioParagraphIndex = savedLocation?.optInt("audioParagraphIndex", 0) ?: 0,
+                        audioCharOffset = savedLocation?.optInt("audioCharOffset", 0) ?: 0,
+                        audioPositionInitialized = savedLocation?.has("audioParagraphIndex") == true,
                         progression = progress?.progression ?: 0f
                     )
                 }
                 val document = contentRepository.load(book)
+                val visualPublication = contentRepository.openForNavigation(book)
+                openedPublication?.close()
+                openedPublication = visualPublication
                 val wordPrefix = withContext(Dispatchers.Default) {
                     buildList {
                         add(0)
@@ -363,11 +463,17 @@ class ReaderViewModel @Inject constructor(
                     }.toIntArray()
                 }
                 wordCountPrefix = wordPrefix
+                val restoredChapterIndex = savedLocator?.title?.let { title ->
+                    document.sections.indexOfFirst { it.title == title }.takeIf { it >= 0 }
+                } ?: location?.second?.coerceIn(0, document.sections.lastIndex)
                 _uiState.update {
                     it.copy(
                         document = document,
+                        publication = visualPublication.publication,
                         currentBlockIndex = location?.first?.coerceIn(0, document.blockCount - 1) ?: 0,
-                        currentSectionIndex = location?.second?.coerceIn(0, document.sections.lastIndex) ?: 0,
+                        currentSectionIndex = restoredChapterIndex ?: 0,
+                        audioSectionIndex = savedLocation?.optInt("audioSectionIndex")
+                            ?.coerceIn(0, document.sections.lastIndex) ?: (restoredChapterIndex ?: 0),
                         currentScrollOffset = location?.third?.coerceAtLeast(0) ?: 0,
                         progression = progress?.progression ?: 0f,
                         isLoading = false,
@@ -400,7 +506,7 @@ class ReaderViewModel @Inject constructor(
         progressRepository.save(
             ReadingProgress(
                 bookId = book.id,
-                locationJson = locationJson(state.currentBlockIndex, state.currentSectionIndex, state.currentScrollOffset),
+                locationJson = savedLocationJson(state),
                 currentPage = if (book.format == BookFormat.PDF) state.currentSectionIndex + 1 else null,
                 totalPages = if (book.format == BookFormat.PDF) document.totalPages else null,
                 progression = state.progression,
@@ -420,6 +526,23 @@ class ReaderViewModel @Inject constructor(
         .put("sectionIndex", sectionIndex)
         .toString()
 
+    private fun audioBookmarkLocationJson(state: ReaderUiState): String = JSONObject()
+        .put("audioSectionIndex", state.audioSectionIndex)
+        .put("audioParagraphIndex", state.audioParagraphIndex)
+        .put("audioCharOffset", state.audioCharOffset)
+        .toString()
+
+    private fun savedLocationJson(state: ReaderUiState): String {
+        val location = state.readiumLocatorJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+            ?: JSONObject(locationJson(state.currentBlockIndex, state.currentSectionIndex, state.currentScrollOffset))
+        if (state.audioPositionInitialized) {
+            location.put("audioSectionIndex", state.audioSectionIndex)
+                .put("audioParagraphIndex", state.audioParagraphIndex)
+                .put("audioCharOffset", state.audioCharOffset)
+        }
+        return location.toString()
+    }
+
     private fun parseLocation(json: String): Triple<Int, Int, Int>? = runCatching {
         val location = JSONObject(json)
         Triple(
@@ -436,7 +559,9 @@ class ReaderViewModel @Inject constructor(
         lineSpacing = readerLineSpacing.coerceIn(1.2f, 2.2f),
         horizontalMargin = readerHorizontalMargin.coerceIn(16, 36),
         readingStyle = runCatching { ReadingStyle.valueOf(readingStyle) }.getOrDefault(ReadingStyle.Scroll),
-        textAlignment = runCatching { TextAlignment.valueOf(textAlignment) }.getOrDefault(TextAlignment.Justified)
+        textAlignment = runCatching { TextAlignment.valueOf(textAlignment) }.getOrDefault(TextAlignment.Justified),
+        brightness = readerBrightness,
+        audioVoiceName = audioVoiceName
     )
 
     private val ReaderDocument.blockCount: Int
@@ -448,5 +573,11 @@ class ReaderViewModel @Inject constructor(
         const val MIN_RECORDED_SESSION_MS = 5_000L
         const val WORDS_PER_ESTIMATED_PAGE = 250
         const val MILLIS_PER_MINUTE = 60_000L
+    }
+
+    override fun onCleared() {
+        openedPublication?.close()
+        openedPublication = null
+        super.onCleared()
     }
 }

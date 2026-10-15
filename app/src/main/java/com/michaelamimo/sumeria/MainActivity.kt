@@ -1,18 +1,20 @@
 package com.michaelamimo.sumeria
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import android.graphics.Color as AndroidColor
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.fragment.app.FragmentActivity
 import com.michaelamimo.sumeria.navigation.Screen
 import com.michaelamimo.sumeria.auth.LoginScreen
 import com.michaelamimo.sumeria.auth.OnboardingScreen
@@ -22,9 +24,12 @@ import com.michaelamimo.sumeria.ui.theme.SumeriaColors
 import com.michaelamimo.sumeria.ui.theme.SumeriaTheme
 import com.michaelamimo.sumeria.navigation.MainNavigationScreen
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.michaelamimo.sumeria.ui.settings.CloudSyncViewModel
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -40,22 +45,24 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            SumeriaTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = SumeriaColors.SurfaceWhite
-                ) {
-                    SumeriaApp()
-                }
-            }
+            SumeriaApp()
         }
     }
 }
 
 @Composable
 fun SumeriaApp() {
+    val settingsViewModel: CloudSyncViewModel = hiltViewModel()
+    val settings by settingsViewModel.state.collectAsStateWithLifecycle()
+    val darkTheme = when (settings.preferences.appThemeMode) {
+        "Light" -> false
+        "Dark" -> true
+        else -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
     val navController = rememberNavController()
 
+    SumeriaTheme(darkTheme = darkTheme) {
+    Surface(modifier = Modifier.fillMaxSize(), color = if (darkTheme) Color(0xFF121212) else SumeriaColors.SurfaceWhite) {
     NavHost(navController = navController, startDestination = Screen.Splash.route) {
         composable(Screen.Splash.route) {
             SplashScreen(onSplashFinished = { isLoggedIn ->
@@ -108,5 +115,7 @@ fun SumeriaApp() {
                 }
             })
         }
+    }
+    }
     }
 }

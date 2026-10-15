@@ -16,7 +16,12 @@ data class UserPreferences(
     val dailyRemindersEnabled: Boolean = false,
     val reminderMinutesAfterMidnight: Int? = null,
     val updatedAtMillis: Long = 0L,
-    val autoCloudSyncEnabled: Boolean = true
+    val autoCloudSyncEnabled: Boolean = true,
+    val readerBrightness: Float = -1f,
+    val libraryShelvesJson: String = "[]",
+    val libraryMembershipJson: String = "{}",
+    val librarySortOrder: String = "DateAdded",
+    val audioVoiceName: String = ""
 ) {
     companion object {
         const val LOCAL_PROFILE_ID = "local"

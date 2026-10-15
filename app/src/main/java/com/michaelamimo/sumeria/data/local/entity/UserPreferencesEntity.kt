@@ -21,16 +21,23 @@ data class UserPreferencesEntity(
     val dailyRemindersEnabled: Boolean,
     val reminderMinutesAfterMidnight: Int?,
     @ColumnInfo(defaultValue = "0") val updatedAtMillis: Long = 0L,
-    @ColumnInfo(defaultValue = "1") val autoCloudSyncEnabled: Boolean = true
+    @ColumnInfo(defaultValue = "1") val autoCloudSyncEnabled: Boolean = true,
+    @ColumnInfo(defaultValue = "-1.0") val readerBrightness: Float = -1f,
+    @ColumnInfo(defaultValue = "'[]'") val libraryShelvesJson: String = "[]",
+    @ColumnInfo(defaultValue = "'{}'") val libraryMembershipJson: String = "{}",
+    @ColumnInfo(defaultValue = "'DateAdded'") val librarySortOrder: String = "DateAdded",
+    @ColumnInfo(defaultValue = "''") val audioVoiceName: String = ""
 )
 
 internal fun UserPreferencesEntity.toDomain() = UserPreferences(
     profileId, dailyGoalMinutes, yearlyBookGoal, readerTheme, readerFont, readerFontSize,
     readerLineSpacing, readerHorizontalMargin, readingStyle, textAlignment, appThemeMode,
-    dailyRemindersEnabled, reminderMinutesAfterMidnight, updatedAtMillis, autoCloudSyncEnabled
+    dailyRemindersEnabled, reminderMinutesAfterMidnight, updatedAtMillis, autoCloudSyncEnabled, readerBrightness,
+    libraryShelvesJson, libraryMembershipJson, librarySortOrder, audioVoiceName
 )
 internal fun UserPreferences.toEntity() = UserPreferencesEntity(
     profileId, dailyGoalMinutes, yearlyBookGoal, readerTheme, readerFont, readerFontSize,
     readerLineSpacing, readerHorizontalMargin, readingStyle, textAlignment, appThemeMode,
-    dailyRemindersEnabled, reminderMinutesAfterMidnight, updatedAtMillis, autoCloudSyncEnabled
+    dailyRemindersEnabled, reminderMinutesAfterMidnight, updatedAtMillis, autoCloudSyncEnabled, readerBrightness,
+    libraryShelvesJson, libraryMembershipJson, librarySortOrder, audioVoiceName
 )

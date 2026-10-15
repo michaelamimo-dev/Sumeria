@@ -19,11 +19,11 @@ private val DarkColorScheme = darkColorScheme(
     primary = SumeriaColors.ActionPrimary,
     secondary = SumeriaColors.Accent,
     tertiary = SumeriaColors.Muted,
-    background = SumeriaColors.SurfaceWhite,
-    surface = SumeriaColors.SurfaceWhite,
-    onPrimary = SumeriaColors.SurfaceWhite,
-    onBackground = SumeriaColors.TextPrimary,
-    onSurface = SumeriaColors.TextPrimary
+    background = androidx.compose.ui.graphics.Color(0xFF111714),
+    surface = androidx.compose.ui.graphics.Color(0xFF1A211E),
+    onPrimary = androidx.compose.ui.graphics.Color(0xFFFFFCF5),
+    onBackground = androidx.compose.ui.graphics.Color(0xFFF2F5F1),
+    onSurface = androidx.compose.ui.graphics.Color(0xFFF2F5F1)
 )
 
 private val LightColorScheme = lightColorScheme(

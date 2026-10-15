@@ -1,11 +1,16 @@
 package com.michaelamimo.sumeria.ui.settings
 
 import android.app.Activity
+import android.Manifest
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -50,6 +55,8 @@ import com.michaelamimo.sumeria.R
 import com.michaelamimo.sumeria.auth.AuthState
 import com.michaelamimo.sumeria.auth.AuthViewModel
 import com.michaelamimo.sumeria.ui.theme.SumeriaTurtleLogo
+import com.michaelamimo.sumeria.notifications.ReadingReminderScheduler
+import com.michaelamimo.sumeria.ui.library.LibraryViewModel
 
 // ---------------------------------------------------------------------------
 // Palette (Adheres strictly to the Sumeria Design System)
@@ -96,52 +103,48 @@ fun SettingsScreen(
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val syncViewModel: CloudSyncViewModel = hiltViewModel()
     val syncState by syncViewModel.state.collectAsStateWithLifecycle()
-    val integrationsViewModel: IntegrationsViewModel = hiltViewModel()
-    val integrationsState by integrationsViewModel.state.collectAsStateWithLifecycle()
+    val libraryViewModel: LibraryViewModel = hiltViewModel()
+    val libraryState by libraryViewModel.uiState.collectAsStateWithLifecycle()
+    val audioVoiceViewModel: AudioVoiceSettingsViewModel = hiltViewModel()
+    val selectedAudioVoice by audioVoiceViewModel.voiceName.collectAsStateWithLifecycle()
+    var availableAudioVoices by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val audioPreview = remember(context) {
+        lateinit var engine: TextToSpeech
+        engine = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                availableAudioVoices = engine.voices
+                    .filter { it.name.isNotBlank() }
+                    .sortedBy { it.name.lowercase() }
+                    .map { it.name to it.locale.displayName }
+            }
+        }
+        engine
+    }
+    DisposableEffect(audioPreview) { onDispose { audioPreview.stop(); audioPreview.shutdown() } }
+    val folderPicker = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let { libraryViewModel.scanFolder(it) }
+    }
     var userName by remember(authUser) {
         mutableStateOf(authUser?.displayName ?: authUser?.email?.substringBefore("@") ?: "Sumeria Reader")
     }
     val userEmail = authUser?.email ?: "Not signed in"
 
     // Reading Goals & Preferences
-    var dailyGoalMinutes by remember { mutableIntStateOf(15) } // Scalable goal starting low (10, 15, 20, 25)
-    var yearlyBookGoal by remember { mutableIntStateOf(12) }
-    var challengeBooksCount by remember { mutableIntStateOf(5) }
-    var defaultReaderTheme by remember { mutableStateOf("Light") }
+    var dailyGoalMinutes by remember(syncState.preferences.dailyGoalMinutes) { mutableIntStateOf(syncState.preferences.dailyGoalMinutes) }
+    var yearlyBookGoal by remember(syncState.preferences.yearlyBookGoal) { mutableIntStateOf(syncState.preferences.yearlyBookGoal) }
+    var challengeBooksCount by remember { mutableIntStateOf(0) }
+    var defaultReaderTheme by remember(syncState.preferences.readerTheme) { mutableStateOf(syncState.preferences.readerTheme) }
     var pageTurnStyle by remember { mutableStateOf("Scroll") }
     var offlineDictionaries by remember { mutableStateOf("English (US) & Spanish (240 MB)") }
-    var selectedAudioVoice by remember { mutableStateOf("Sumeria Serene (Female)") }
-
-    val csvDocumentPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        val csv = integrationsState.preparedCsv
-        if (uri == null) {
-            integrationsViewModel.exportCancelled()
-        } else if (csv != null) {
-            runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { output ->
-                    output.write(csv.toByteArray(Charsets.UTF_8))
-                } ?: error("The selected location could not be opened.")
-            }.onSuccess { integrationsViewModel.exportSaved() }
-                .onFailure { integrationsViewModel.exportFailed(it.localizedMessage ?: "Could not save the export.") }
-        }
-    }
-
-    LaunchedEffect(integrationsState.preparedCsv) {
-        if (integrationsState.preparedCsv != null) csvDocumentPicker.launch("sumeria_goodreads_export.csv")
-    }
-    LaunchedEffect(integrationsState.status) {
-        integrationsState.status?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            integrationsViewModel.dismissStatus()
-        }
-    }
 
     // Reminders & App Display
-    var dailyReminders by remember { mutableStateOf(true) }
-    var reminderTime by remember { mutableStateOf("8:00 PM") }
-    var appThemeMode by remember { mutableStateOf("System") }
+    var dailyReminders by remember(syncState.preferences.dailyRemindersEnabled) { mutableStateOf(syncState.preferences.dailyRemindersEnabled) }
+    var reminderTime by remember(syncState.preferences.reminderMinutesAfterMidnight) {
+        mutableStateOf(syncState.preferences.reminderMinutesAfterMidnight?.toReminderLabel() ?: "8:00 PM")
+    }
+    var appThemeMode by remember(syncState.preferences.appThemeMode) { mutableStateOf(syncState.preferences.appThemeMode) }
 
     // Storage
     var cacheSize by remember { mutableStateOf("128 MB") }
@@ -158,6 +161,38 @@ fun SettingsScreen(
     var showBadgesModal by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    fun setDailyGoal(value: Int) {
+        val bounded = value.coerceIn(5, 240)
+        dailyGoalMinutes = bounded
+        syncViewModel.updateDailyGoal(bounded)
+    }
+    val requestNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        dailyReminders = granted
+        if (granted) {
+            val minutes = reminderTime.toReminderMinutes()
+            syncViewModel.updateDailyReminder(true, minutes)
+            ReadingReminderScheduler.schedule(context, true, minutes)
+        } else {
+            Toast.makeText(context, "Allow notifications to receive reading reminders.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun setDailyReminderEnabled(enabled: Boolean) {
+        val minutes = reminderTime.toReminderMinutes()
+        if (!enabled) {
+            dailyReminders = false
+            syncViewModel.updateDailyReminder(false, minutes)
+            ReadingReminderScheduler.schedule(context, false, minutes)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            dailyReminders = true
+            syncViewModel.updateDailyReminder(true, minutes)
+            ReadingReminderScheduler.schedule(context, true, minutes)
+        }
+    }
 
     LaunchedEffect(authState) {
         when (val current = authState) {
@@ -302,7 +337,7 @@ fun SettingsScreen(
                                 text = "${mins}m",
                                 selected = dailyGoalMinutes == mins,
                                 modifier = Modifier.weight(1f),
-                                onClick = { dailyGoalMinutes = mins }
+                                onClick = { setDailyGoal(mins) }
                             )
                         }
 
@@ -312,7 +347,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
-                                onClick = { if (dailyGoalMinutes > 5) dailyGoalMinutes -= 5 },
+                                onClick = { if (dailyGoalMinutes > 5) setDailyGoal(dailyGoalMinutes - 5) },
                                 modifier = Modifier
                                     .size(36.dp)
                                     .background(Mint, CircleShape)
@@ -320,7 +355,7 @@ fun SettingsScreen(
                                 Icon(Icons.Rounded.Remove, contentDescription = "Decrease goal", tint = Ink, modifier = Modifier.size(18.dp))
                             }
                             IconButton(
-                                onClick = { if (dailyGoalMinutes < 240) dailyGoalMinutes += 5 },
+                                onClick = { if (dailyGoalMinutes < 240) setDailyGoal(dailyGoalMinutes + 5) },
                                 modifier = Modifier
                                     .size(36.dp)
                                     .background(Mint, CircleShape)
@@ -422,7 +457,7 @@ fun SettingsScreen(
                                     .weight(1f)
                                     .height(48.dp)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .clickable { defaultReaderTheme = themeLabel },
+                                    .clickable { defaultReaderTheme = themeLabel; syncViewModel.updateReaderTheme(themeLabel) },
                                 shape = RoundedCornerShape(14.dp),
                                 color = themeBg,
                                 border = BorderStroke(
@@ -572,7 +607,7 @@ fun SettingsScreen(
                                 color = Ink
                             )
                             Text(
-                                text = selectedAudioVoice,
+                                text = selectedAudioVoice.ifBlank { "Device default voice" },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Sage,
                                 maxLines = 1,
@@ -829,7 +864,7 @@ fun SettingsScreen(
 
                         Switch(
                             checked = dailyReminders,
-                            onCheckedChange = { dailyReminders = it },
+                            onCheckedChange = ::setDailyReminderEnabled,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Paper,
                                 checkedTrackColor = Ink,
@@ -913,7 +948,7 @@ fun SettingsScreen(
                                 ChoiceChip(
                                     text = mode,
                                     selected = appThemeMode == mode,
-                                    onClick = { appThemeMode = mode }
+                                    onClick = { appThemeMode = mode; syncViewModel.updateAppTheme(mode) }
                                 )
                             }
                         }
@@ -1237,6 +1272,11 @@ fun SettingsScreen(
                         label = { Text("Current Password") },
                         singleLine = true,
                         visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passVisible = !passVisible }) {
+                                Icon(if (passVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, contentDescription = if (passVisible) "Hide password" else "Show password", tint = Sage)
+                            }
+                        },
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
                         modifier = Modifier.fillMaxWidth()
@@ -1248,6 +1288,11 @@ fun SettingsScreen(
                         label = { Text("New Password") },
                         singleLine = true,
                         visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passVisible = !passVisible }) {
+                                Icon(if (passVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, contentDescription = if (passVisible) "Hide password" else "Show password", tint = Sage)
+                            }
+                        },
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
                         modifier = Modifier.fillMaxWidth()
@@ -1259,6 +1304,11 @@ fun SettingsScreen(
                         label = { Text("Confirm New Password") },
                         singleLine = true,
                         visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passVisible = !passVisible }) {
+                                Icon(if (passVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, contentDescription = if (passVisible) "Hide password" else "Show password", tint = Sage)
+                            }
+                        },
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Ink, unfocusedBorderColor = Line, focusedLabelColor = Ink),
                         modifier = Modifier.fillMaxWidth()
@@ -1291,8 +1341,8 @@ fun SettingsScreen(
     // 4. Yearly Reading Challenge Dialog
     if (showYearlyGoalDialog) {
         var tempGoal by remember { mutableIntStateOf(yearlyBookGoal) }
-        val sampleBooks = listOf("Atomic Habits", "Sapiens", "48 Laws of Power", "The Subtle Art", "Refactoring UI", "Deep Work")
-        var selectedBooks by remember { mutableStateOf(setOf("Atomic Habits", "Sapiens", "Deep Work")) }
+        val availableBooks = libraryState.books
+        var selectedBooks by remember(availableBooks) { mutableStateOf(emptySet<String>()) }
 
         AlertDialog(
             onDismissRequest = { showYearlyGoalDialog = false },
@@ -1332,14 +1382,17 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        sampleBooks.forEach { book ->
-                            val isSelected = selectedBooks.contains(book)
+                        if (availableBooks.isEmpty()) {
+                            Text("Add books to your library first to choose books for this challenge.", color = Sage, fontSize = 13.sp)
+                        }
+                        availableBooks.forEach { book ->
+                            val isSelected = selectedBooks.contains(book.id)
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSelected) Mint else Color.White,
                                 border = BorderStroke(1.dp, Line),
                                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
-                                    selectedBooks = if (isSelected) selectedBooks - book else selectedBooks + book
+                                    selectedBooks = if (isSelected) selectedBooks - book.id else selectedBooks + book.id
                                 }
                             ) {
                                 Row(
@@ -1347,7 +1400,7 @@ fun SettingsScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(book, fontSize = 13.sp, color = Ink)
+                                    Text(book.title, fontSize = 13.sp, color = Ink)
                                     if (isSelected) Text("✓ Included", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Ink)
                                 }
                             }
@@ -1360,6 +1413,7 @@ fun SettingsScreen(
                     onClick = {
                         yearlyBookGoal = tempGoal
                         challengeBooksCount = selectedBooks.size
+                        syncViewModel.updateYearlyBookGoal(tempGoal)
                         showYearlyGoalDialog = false
                         Toast.makeText(context, "2026 challenge updated ($yearlyBookGoal books)", Toast.LENGTH_SHORT).show()
                     },
@@ -1379,14 +1433,6 @@ fun SettingsScreen(
 
     // 5. Audio Reader Voices Selection Dialog
     if (showVoiceSelectionDialog) {
-        val voiceOptions = listOf(
-            "Sumeria Serene (Female)" to "Natural, calm, and balanced pacing",
-            "Sumeria Deep (Male)" to "Resonant, warm narrative tone",
-            "Warm Storyteller (Female)" to "Expressive storytelling cadence",
-            "Nordic Crisp (Male)" to "Clear, precise academic articulation",
-            "Classic Scholar (Neutral)" to "Distraction-free neutral cadence"
-        )
-
         AlertDialog(
             onDismissRequest = { showVoiceSelectionDialog = false },
             containerColor = Paper,
@@ -1400,10 +1446,13 @@ fun SettingsScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Choose default voice profile for reader audio mode:", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    Text("Choose and preview a voice available on this device:", style = MaterialTheme.typography.bodySmall, color = Sage)
                     Spacer(Modifier.height(4.dp))
 
-                    voiceOptions.forEach { (voiceTitle, voiceDesc) ->
+                    if (availableAudioVoices.isEmpty()) {
+                        Text("No installed text-to-speech voices are available yet.", color = Sage, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    availableAudioVoices.forEach { (voiceTitle, voiceDesc) ->
                         val isSelected = selectedAudioVoice == voiceTitle
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -1413,9 +1462,14 @@ fun SettingsScreen(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {
-                                    selectedAudioVoice = voiceTitle
-                                    showVoiceSelectionDialog = false
-                                    Toast.makeText(context, "Voice set to $voiceTitle", Toast.LENGTH_SHORT).show()
+                                    audioVoiceViewModel.selectVoice(voiceTitle)
+                                    audioPreview.voices.firstOrNull { it.name == voiceTitle }?.let(audioPreview::setVoice)
+                                    audioPreview.speak(
+                                        "Welcome to Sumeria. This is a sample of your selected reading voice.",
+                                        TextToSpeech.QUEUE_FLUSH,
+                                        null,
+                                        "voice-preview"
+                                    )
                                 }
                         ) {
                             Row(
@@ -1430,10 +1484,10 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(voiceTitle, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Ink)
+                                    Text(voiceTitle.replace('_', ' '), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Ink)
                                     Text(voiceDesc, fontSize = 11.sp, color = Sage)
                                 }
-                                if (isSelected) Text("Active", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Ink)
+                                Text(if (isSelected) "Selected · tap to sample" else "Tap to select & sample", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Ink)
                             }
                         }
                     }
@@ -1462,24 +1516,19 @@ fun SettingsScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Export your library as a Goodreads-compatible CSV. Choose a destination in Android's save dialog; installed cloud storage apps can appear there.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Sage
-                    )
-                    OutlinedButton(
-                        onClick = { integrationsViewModel.prepareGoodreadsExport() },
-                        enabled = !integrationsState.isPreparingExport,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
-                        border = BorderStroke(1.dp, Line),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        if (integrationsState.isPreparingExport) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text(if (integrationsState.isPreparingExport) "Preparing export…" else "Export Goodreads CSV")
+                    Text("Connect a cloud library to browse its EPUB and PDF files from Sumeria.", style = MaterialTheme.typography.bodySmall, color = Sage)
+                    listOf("Dropbox", "Google Drive").forEach { service ->
+                        OutlinedButton(
+                            onClick = {
+                                showConnectedServicesDialog = false
+                                folderPicker.launch(null)
+                                Toast.makeText(context, "Choose $service in the Android storage picker.", Toast.LENGTH_LONG).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
+                            border = BorderStroke(1.dp, Line),
+                            shape = RoundedCornerShape(14.dp)
+                        ) { Text("Connect $service") }
                     }
                 }
             },
@@ -1549,7 +1598,7 @@ fun SettingsScreen(
                     ) {
                         OutlinedTextField(
                             value = customHour,
-                            onValueChange = { if (it.length <= 2) customHour = it },
+                            onValueChange = { if (it.length <= 2) { customHour = it; selectedPresetTime = "" } },
                             label = { Text("Hour") },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -1561,7 +1610,7 @@ fun SettingsScreen(
 
                         OutlinedTextField(
                             value = customMinute,
-                            onValueChange = { if (it.length <= 2) customMinute = it },
+                            onValueChange = { if (it.length <= 2) { customMinute = it; selectedPresetTime = "" } },
                             label = { Text("Min") },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -1583,6 +1632,9 @@ fun SettingsScreen(
                     onClick = {
                         val formattedCustom = "${customHour.padStart(2, '0')}:${customMinute.padStart(2, '0')} $customAmPm"
                         reminderTime = if (selectedPresetTime.isNotEmpty()) selectedPresetTime else formattedCustom
+                        val minutes = reminderTime.toReminderMinutes()
+                        syncViewModel.updateDailyReminder(dailyReminders, minutes)
+                        ReadingReminderScheduler.schedule(context, dailyReminders, minutes)
                         showTimePickerDialog = false
                         Toast.makeText(context, "Reminder set for $reminderTime", Toast.LENGTH_SHORT).show()
                     },
@@ -2127,4 +2179,22 @@ private fun Context.findActivity(): Activity? {
         currentContext = currentContext.baseContext
     }
     return null
+}
+
+private fun String.toReminderMinutes(): Int = runCatching {
+    val parts = trim().split(Regex("\\s+"))
+    val time = parts[0].split(":")
+    val rawHour = time[0].toInt().coerceIn(1, 12)
+    val minute = time[1].toInt().coerceIn(0, 59)
+    val isPm = parts.getOrNull(1)?.equals("PM", ignoreCase = true) == true
+    val hour = (rawHour % 12) + if (isPm) 12 else 0
+    hour * 60 + minute
+}.getOrDefault(20 * 60)
+
+private fun Int.toReminderLabel(): String {
+    val hour24 = (this / 60).coerceIn(0, 23)
+    val minute = (this % 60).coerceIn(0, 59)
+    val suffix = if (hour24 < 12) "AM" else "PM"
+    val hour12 = when (val hour = hour24 % 12) { 0 -> 12; else -> hour }
+    return "$hour12:${minute.toString().padStart(2, '0')} $suffix"
 }
